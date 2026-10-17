@@ -1,5 +1,7 @@
 import type { ChatRequest, Chunk, Message, Provider, ToolCall } from "./provider/provider.ts";
 import type { Tool } from "./tools/tool.ts";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 
 const DEFAULT_SYSTEM =
   "You are a coding agent working in a loop: understand, plan, act, verify. " +
@@ -27,6 +29,16 @@ const CRITIC_SYSTEM =
  * to stop the model retrying a broken call forever, so a round that works resets it.
  */
 const MAX_TOOL_STRIKES = 8;
+
+/**
+ * A tool result larger than this has its full text saved to a file, and only a
+ * head and a tail of it stay in context, noted with the path so the model can
+ * read the rest with offset/limit. High on purpose: ordinary results never
+ * reach it, but one huge bash dump must not own the window forever.
+ */
+const MAX_TOOL_OUTPUT = 32_000;
+/** How much of a spilled result stays in context: this many chars at each end. */
+const KEPT_EDGES = 2_000;
 
 /** Why a turn ended, so callers can say so instead of going quiet. */
 export type StopReason = "answered" | "stuck";
@@ -110,7 +122,7 @@ export function createChat(
       // still go back in call order, which is what the model expects.
       const results = await Promise.all(calls.map(async (call) => [call, await run(tools, call)] as const));
       for (const [call, result] of results) {
-        messages.push({ role: "tool", toolCallId: call.id, content: result.content });
+        messages.push({ role: "tool", toolCallId: call.id, content: await spillResult(call.name, result.content) });
       }
       usedTools = true;
 
@@ -155,6 +167,28 @@ export function createChat(
       messages.splice(0, messages.length, { role: "system", content: system });
     },
   };
+}
+
+/**
+ * Ordinary results pass through untouched; anything over the limit is written
+ * to /tmp/kairo/<tool>-<id>.txt and only its ends are reported back, with a
+ * note naming the file. A failed save still truncates rather than throwing —
+ * a tmp write must not be able to kill the turn.
+ */
+async function spillResult(name: string, content: string): Promise<string> {
+  if (content.length <= MAX_TOOL_OUTPUT) return content;
+  const head = content.slice(0, KEPT_EDGES);
+  const tail = content.slice(-KEPT_EDGES);
+  let where: string;
+  try {
+    const file = `/tmp/kairo/${name}-${randomUUID().slice(0, 8)}.txt`;
+    await mkdir("/tmp/kairo", { recursive: true });
+    await writeFile(file, content, "utf8");
+    where = `full output saved to ${file}`;
+  } catch {
+    where = "could not save the full output";
+  }
+  return `${head}\n[output too large (${content.length} chars); ${where}]\n${tail}`;
 }
 
 /**
