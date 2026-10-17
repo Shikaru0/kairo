@@ -4,7 +4,9 @@ import type { Tool } from "./tool.ts";
 /** Reads a text file from disk; failures surface to the model as an error result. */
 export const readTool: Tool = {
   name: "read",
-  description: "Read a text file and return its contents, optionally a slice of its lines.",
+  description:
+    "Read a text file and return its contents, optionally a slice of its lines. " +
+    "Pass offset/limit if you only need a specific part of it.",
   parameters: {
     type: "object",
     properties: {

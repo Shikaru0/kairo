@@ -16,7 +16,7 @@ async function sessionPath(id: string) {
 }
 
 const sessionId = process.argv[2] || DEFAULT_SESSION;
-const sessionFile = await sessionPath(sessionId);
+let sessionFile = await sessionPath(sessionId);
 
 const provider = ollama();
 /** Model settings, shared with the subagents the `task` tool spawns. */
@@ -38,6 +38,20 @@ async function save() {
     await writeFile(sessionFile, JSON.stringify(chat.dump(), null, 2), "utf8");
   } catch (e) {
     // ignore save errors
+  }
+}
+
+/** Read a saved session into the chat. Returns an error message, or null on success. */
+async function loadSession(id: string): Promise<string | null> {
+  const path = await sessionPath(id);
+  if (!existsSync(path)) return `no session ${id}`;
+  try {
+    const messages = JSON.parse(await readFile(path, "utf8")) as Message[];
+    if (!Array.isArray(messages)) return `invalid session ${id}`;
+    chat.load(messages);
+    return null;
+  } catch (e) {
+    return `failed to use ${id}`;
   }
 }
 
@@ -66,48 +80,13 @@ for await (const line of rl) {
   if (input.startsWith("/use ")) {
     const id = input.slice(5).trim();
     if (id) {
-      const path = await sessionPath(id);
-      if (existsSync(path)) {
-        try {
-          const data = await readFile(path, "utf8");
-          const messages = JSON.parse(data) as Message[];
-          if (Array.isArray(messages)) {
-            chat.load(messages);
-            await save();
-            process.stdout.write(`\x1b[2m[using ${id}]\x1b[0m\n\n`);
-          } else {
-            process.stdout.write(`\x1b[2m[invalid session ${id}]\x1b[0m\n\n`);
-          }
-        } catch (e) {
-          process.stdout.write(`\x1b[2m[failed to use ${id}]\x1b[0m\n\n`);
-        }
+      const error = await loadSession(id);
+      if (error) {
+        process.stdout.write(`\x1b[2m[${error}]\x1b[0m\n\n`);
       } else {
-        process.stdout.write(`\x1b[2m[no session ${id}]\x1b[0m\n\n`);
-      }
-    }
-    if (!closed) rl.prompt();
-    continue;
-  }
-  if (input.startsWith("/load ")) {
-    const id = input.slice(6).trim();
-    if (id) {
-      const path = await sessionPath(id);
-      if (existsSync(path)) {
-        try {
-          const data = await readFile(path, "utf8");
-          const messages = JSON.parse(data) as Message[];
-          if (Array.isArray(messages)) {
-            chat.load(messages);
-            await save();
-            process.stdout.write(`\x1b[2m[loaded ${id}]\x1b[0m\n\n`);
-          } else {
-            process.stdout.write(`\x1b[2m[invalid session ${id}]\x1b[0m\n\n`);
-          }
-        } catch (e) {
-          process.stdout.write(`\x1b[2m[failed to load ${id}]\x1b[0m\n\n`);
-        }
-      } else {
-        process.stdout.write(`\x1b[2m[no session ${id}]\x1b[0m\n\n`);
+        // The point of switching: later turns are saved to this session, not the startup one.
+        sessionFile = await sessionPath(id);
+        process.stdout.write(`\x1b[2m[using ${id}]\x1b[0m\n\n`);
       }
     }
     if (!closed) rl.prompt();
@@ -155,7 +134,7 @@ for await (const line of rl) {
     continue;
   }
   if (input === "/help") {
-    process.stdout.write("/new /clear /history /load <id> /save <id> /use <id> /ls /exit\n\n");
+    process.stdout.write("/new /clear /history /use <id> /save <id> /ls /exit\n\n");
     if (!closed) rl.prompt();
     continue;
   }
