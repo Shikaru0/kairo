@@ -8,8 +8,9 @@ export interface Todo {
 const MARK = { pending: "[ ]", in_progress: "[~]", done: "[x]" } as const;
 
 /**
- * The current plan. Module scope is enough because one process runs one
- * conversation; a second chat in the same process would share it.
+ * The current plan. Module scope is enough because every call passes the full
+ * list, so the file is only a display cache; subagents share it, and the last
+ * writer's plan is the one shown.
  */
 let plan: Todo[] = [];
 

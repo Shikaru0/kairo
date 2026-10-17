@@ -8,7 +8,19 @@ const DEFAULT_SYSTEM =
   "If a task needs more than one step, call the todo tool to write the plan before acting, " +
   "then update it as steps start and finish. Skip the plan for a single straightforward step. " +
   "Read each tool result before the next step, and revise the plan when a step fails " +
-  "instead of repeating it. Be concise; prefer the smallest change that works.";
+  "instead of repeating it. " +
+  "Subagents can take work off your hands: start a task subagent for a bulky step, keep going on your " +
+  "own steps while it runs, then collect its answer. " +
+  "Be concise; prefer the smallest change that works.";
+
+/**
+ * Prompt for the critic pass: it judges the answer against the task and what the
+ * tools actually returned, not against how confident the answer sounds.
+ */
+const CRITIC_SYSTEM =
+  "You check one answer against the task and the tool results in this conversation. " +
+  "Reply with exactly OK if it is correct, complete and supported by the tool results. " +
+  "Otherwise reply with one short paragraph naming what is wrong or unsupported.";
 
 /**
  * How many tool rounds may fail in a row before the turn gives up. The point is
@@ -24,10 +36,22 @@ export interface Stop {
   reason: StopReason;
 }
 
+/** Chat-level chunk: the verdict of the critic pass, and whether it asked for a fix. */
+export interface Check {
+  type: "check";
+  verdict: string;
+  revised: boolean;
+}
+
 /** Anything that configures one conversation; everything but the history. */
 export interface ChatOptions extends Omit<ChatRequest, "messages" | "tools"> {
   system?: string;
   tools?: Tool[];
+  /**
+   * Run one critic pass after a turn that used tools. Off for subagents, whose
+   * answer is judged by whoever called them.
+   */
+  verify?: boolean;
 }
 
 /**
@@ -36,13 +60,15 @@ export interface ChatOptions extends Omit<ChatRequest, "messages" | "tools"> {
  */
 export function createChat(
   provider: Provider,
-  { model, temperature, thinking, system = DEFAULT_SYSTEM, tools = [] }: ChatOptions,
+  { model, temperature, thinking, system = DEFAULT_SYSTEM, tools = [], verify = true }: ChatOptions,
 ) {
   const messages: Message[] = [{ role: "system", content: system }];
 
   /** One model turn, plus the tool rounds it asks for. */
-  async function* turn(): AsyncIterable<Chunk | Stop> {
+  async function* turn(): AsyncIterable<Chunk | Stop | Check> {
     let strikes = 0;
+    let usedTools = false;
+    let checked = false;
 
     for (;;) {
       let reply = "";
@@ -61,6 +87,21 @@ export function createChat(
       }
 
       if (!calls.length) {
+        // One critic pass per turn, and only once tools were involved: that is
+        // where an answer can outrun what the tools actually returned.
+        if (verify && usedTools && !checked) {
+          checked = true;
+          const verdict = await critic();
+          const revised = !/^ok\b/i.test(verdict);
+          yield { type: "check", verdict, revised };
+          if (revised) {
+            messages.push({
+              role: "user",
+              content: `That answer was checked and needs fixing: ${verdict}\nRevise it now.`,
+            });
+            continue;
+          }
+        }
         yield { type: "stop", reason: "answered" };
         return;
       }
@@ -71,6 +112,7 @@ export function createChat(
       for (const [call, result] of results) {
         messages.push({ role: "tool", toolCallId: call.id, content: result.content });
       }
+      usedTools = true;
 
       strikes = results.some(([, result]) => result.ok) ? 0 : strikes + 1;
       if (strikes > MAX_TOOL_STRIKES) {
@@ -80,8 +122,23 @@ export function createChat(
     }
   }
 
+  /** One tool-free model call that judges the answer so far. */
+  async function critic(): Promise<string> {
+    let verdict = "";
+    for await (const chunk of provider.stream({
+      model,
+      temperature,
+      thinking,
+      messages: [{ role: "system", content: CRITIC_SYSTEM }, ...messages],
+    })) {
+      if (chunk.type === "text") verdict += chunk.text;
+    }
+    // A silent critic is not a "no"; do not burn a revision on an empty reply.
+    return verdict.trim() || "OK";
+  }
+
   return {
-    async *send(input: string): AsyncIterable<Chunk | Stop> {
+    async *send(input: string): AsyncIterable<Chunk | Stop | Check> {
       messages.push({ role: "user", content: input });
       yield* turn();
     },

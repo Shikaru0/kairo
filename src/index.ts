@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createChat } from "./chat.ts";
 import { ollama } from "./provider/ollama.ts";
-import { tools } from "./tools/tool.ts";
+import { createTools } from "./tools/tool.ts";
 import type { Message } from "./provider/provider.ts";
 
 const SESSIONS_DIR = ".kairo-sessions";
@@ -18,12 +18,10 @@ async function sessionPath(id: string) {
 const sessionId = process.argv[2] || DEFAULT_SESSION;
 const sessionFile = await sessionPath(sessionId);
 
-const chat = createChat(ollama(), {
-  model: "qwen3.5:4b",
-  temperature: 0.5,
-  thinking: true,
-  tools: tools,
-});
+const provider = ollama();
+/** Model settings, shared with the subagents the `task` tool spawns. */
+const settings = { model: "qwen3.5:4b", temperature: 0.5, thinking: true } as const;
+const chat = createChat(provider, { ...settings, tools: createTools({ provider, ...settings }) });
 
 if (existsSync(sessionFile)) {
   try {
@@ -182,6 +180,12 @@ for await (const line of rl) {
       else if (chunk.type === "finish" && chunk.reason === "length") process.stdout.write("\x1b[2m[cut off: hit the model's context/token limit]\x1b[0m\n\n");
       else if (chunk.type === "stop" && chunk.reason === "stuck") {
         process.stdout.write("\x1b[2m[stopped: tool calls kept failing]\x1b[0m\n\n");
+      } else if (chunk.type === "check") {
+        process.stdout.write(
+          chunk.revised
+            ? `\x1b[2m[self-check] ${chunk.verdict}\x1b[0m\n\n`
+            : "\x1b[2m[self-check] ok\x1b[0m\n\n",
+        );
       }
     }
     if (inThinking) process.stdout.write("\x1b[0m");
