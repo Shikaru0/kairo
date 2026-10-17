@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ollama } from "./ollama.ts";
+import { openaiCompatible } from "./openai.ts";
 import type { ChatRequest } from "./provider.ts";
 
 /** Fake OpenAI-compatible endpoint that records the request body it received. */
@@ -41,7 +41,7 @@ test("reasoning is replayed to the model in assistant content", async () => {
     ],
   };
 
-  for await (const _ of ollama(fake.url).stream(request)) {
+  for await (const _ of openaiCompatible({ id: "fake", baseURL: `${fake.url}/v1`, apiKey: "test" }).stream(request)) {
     // drain
   }
   fake.stop();

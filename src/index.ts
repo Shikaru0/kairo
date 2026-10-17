@@ -51,9 +51,13 @@ rl.on("close", () => {
 
 rl.setPrompt("> ");
 rl.prompt();
+let exited = false;
 for await (const line of rl) {
   const input = line.trim();
-  if (input === "/exit" || input === "exit") break;
+  if (input === "/exit" || input === "exit") {
+    exited = true;
+    break;
+  }
   if (input === "/new") {
     chat.reset();
     await save();
@@ -176,6 +180,9 @@ for await (const line of rl) {
       if (chunk.type === "text") process.stdout.write(chunk.text);
       else if (chunk.type === "toolCall") process.stdout.write(`\x1b[2m[tool] ${chunk.call.name}(${chunk.call.arguments})\x1b[0m\n\n`);
       else if (chunk.type === "finish" && chunk.reason === "length") process.stdout.write("\x1b[2m[cut off: hit the model's context/token limit]\x1b[0m\n\n");
+      else if (chunk.type === "stop" && chunk.reason === "stuck") {
+        process.stdout.write("\x1b[2m[stopped: tool calls kept failing]\x1b[0m\n\n");
+      }
     }
     if (inThinking) process.stdout.write("\x1b[0m");
     process.stdout.write("\n\n");
@@ -186,3 +193,4 @@ for await (const line of rl) {
 }
 
 rl.close();
+if (!exited) process.stdout.write("\x1b[2m[input closed - exiting]\x1b[0m\n");
