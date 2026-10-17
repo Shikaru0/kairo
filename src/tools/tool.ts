@@ -1,6 +1,7 @@
 import type { ToolSpec } from "../provider/provider.ts";
 import { readTool } from "./read.ts";
 import { writeTool } from "./write.ts";
+import { editTool } from "./edit.ts";
 import { bashTool } from "./bash.ts";
 
 /** A capability the app can run when the model asks for it. */
@@ -12,5 +13,6 @@ export interface Tool extends ToolSpec {
 export const tools: Tool[] = [
   readTool,
   writeTool,
+  editTool,
   bashTool,
 ];
