@@ -65,14 +65,14 @@ export function createChat(
         return;
       }
 
-      let worked = false;
-      for (const call of calls) {
-        const result = await run(tools, call);
-        worked ||= result.ok;
+      // Calls in one response are independent, so run them together; results
+      // still go back in call order, which is what the model expects.
+      const results = await Promise.all(calls.map(async (call) => [call, await run(tools, call)] as const));
+      for (const [call, result] of results) {
         messages.push({ role: "tool", toolCallId: call.id, content: result.content });
       }
 
-      strikes = worked ? 0 : strikes + 1;
+      strikes = results.some(([, result]) => result.ok) ? 0 : strikes + 1;
       if (strikes > MAX_TOOL_STRIKES) {
         yield { type: "stop", reason: "stuck" };
         return;
