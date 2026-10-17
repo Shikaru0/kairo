@@ -24,7 +24,7 @@ export type Message =
   | { role: "system"; content: string }
   | { role: "user"; content: string }
   /** `toolCalls` is set when the assistant asked for tools instead of answering. */
-  | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
+  | { role: "assistant"; content: string; toolCalls?: ToolCall[]; reasoning?: string }
   /** `toolCallId` names the call this result answers. */
   | { role: "tool"; content: string; toolCallId: string };
 

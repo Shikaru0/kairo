@@ -63,10 +63,17 @@ function toWireMessage(message: Message): ChatCompletionMessageParam {
       return { role: "user", content: message.content };
     case "tool":
       return { role: "tool", content: message.content, tool_call_id: message.toolCallId };
-    case "assistant":
+    case "assistant": {
+      // Chat Completions drops reasoning on every request, so replay it inside
+      // the content — otherwise each tool round starts with the model blind to
+      // its own earlier thinking.
+      const content = message.reasoning
+        ? `<thinking>\n${message.reasoning}\n</thinking>\n${message.content}`
+        : message.content;
       return message.toolCalls?.length
-        ? { role: "assistant", content: message.content, tool_calls: message.toolCalls.map(toWireCall) }
-        : { role: "assistant", content: message.content };
+        ? { role: "assistant", content, tool_calls: message.toolCalls.map(toWireCall) }
+        : { role: "assistant", content };
+    }
   }
 }
 

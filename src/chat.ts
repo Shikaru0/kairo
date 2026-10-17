@@ -1,7 +1,7 @@
 import type { ChatRequest, Chunk, Message, Provider, ToolCall } from "./provider/provider.ts";
 import type { Tool } from "./tools/tool.ts";
 
-const DEFAULT_SYSTEM = "You are a helpful assistant.";
+const DEFAULT_SYSTEM = "Think step by step. Reason about your own reasoning. Analyze, plan, act, reflect. Be minimal.";
 
 /** How many times one turn may call tools before giving up. */
 const MAX_TOOL_ROUNDS = 8;
@@ -26,16 +26,18 @@ export function createChat(
   async function* turn(): AsyncIterable<Chunk> {
     for (let round = 0; ; round++) {
       let reply = "";
+      let reasoning = "";
       const calls: ToolCall[] = [];
       try {
         for await (const chunk of provider.stream({ model, temperature, thinking, tools, messages })) {
           if (chunk.type === "text") reply += chunk.text;
+          else if (chunk.type == "reasoning") reasoning += chunk.text;
           else if (chunk.type === "toolCall") calls.push(chunk.call);
           yield chunk;
         }
       } finally {
         // Runs even if the caller stops mid-stream, so history stays consistent.
-        messages.push({ role: "assistant", content: reply, toolCalls: calls });
+        messages.push({ role: "assistant", content: reply, toolCalls: calls, reasoning });
       }
 
       if (!calls.length || round >= MAX_TOOL_ROUNDS) return;
@@ -49,6 +51,18 @@ export function createChat(
     async *send(input: string): AsyncIterable<Chunk> {
       messages.push({ role: "user", content: input });
       yield* turn();
+    },
+    /** Return a JSON-serializable snapshot of all messages in the conversation. */
+    dump(): Message[] {
+      return structuredClone(messages);
+    },
+    /** Replace the current conversation history with the provided messages. */
+    load(dumped: Message[]) {
+      messages.splice(0, messages.length, ...structuredClone(dumped));
+    },
+    /** Clear all messages and restore the system prompt. */
+    reset() {
+      messages.splice(0, messages.length, { role: "system", content: system });
     },
   };
 }
