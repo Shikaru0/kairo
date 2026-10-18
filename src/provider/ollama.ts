@@ -12,6 +12,10 @@ export interface OllamaOptions {
  */
 const DEFAULT_CONTEXT_SIZE = 65_536;
 
+/** Transient failures get this many retries, on a fixed delay, per request. */
+const RETRIES = 5;
+const RETRY_DELAY_MS = 2_000;
+
 /** One NDJSON line of `/api/chat`'s stream. */
 interface OllamaChunk {
   error?: string;
@@ -48,10 +52,9 @@ export function ollama(
     contextSize,
     async *stream({ model, messages, tools, temperature, thinking }: ChatRequest) {
       const names = toolNames(messages);
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const response = await request(
+        url,
+        JSON.stringify({
           model,
           messages: messages.map((message) => toOllamaMessage(message, names)),
           tools: tools?.length ? tools.map(toWireTool) : undefined,
@@ -59,12 +62,8 @@ export function ollama(
           stream: true,
           options: { num_ctx: contextSize, temperature },
         }),
-      });
-      //if (!response.ok || !response.body) throw new Error(`ollama ${response.status}: ${await response.text()}`);
-      if (!response.body) { //(!response.ok || !response.body) {
-        console.log(response);
-        return;
-      }
+      );
+      if (!response.body) throw new Error("ollama: empty response body");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -107,6 +106,37 @@ export function ollama(
       if (finish) yield { type: "finish", reason: finish };
     },
   };
+}
+
+/** A hiccup worth retrying: rate limited, or the server fell over. */
+const retryable = (status: number) => status === 429 || status >= 500;
+
+const sleep = () => new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+
+/**
+ * One request. Transient failures — a dropped connection, or an ollama runner
+ * that died and relaunches (429, 5xx) — retry on a fixed delay; the budget is
+ * per request, so every call starts fresh. Anything else fails immediately,
+ * carrying the server's own error text, and running out of retries does too.
+ */
+async function request(url: string, payload: string): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: payload });
+    } catch (error) {
+      if (attempt === RETRIES) throw error;
+      await sleep();
+      continue;
+    }
+    if (response.ok) return response;
+    const detail = await response.text();
+    if (retryable(response.status) && attempt < RETRIES) {
+      await sleep();
+      continue;
+    }
+    throw new Error(`ollama ${response.status}: ${detail}`);
+  }
 }
 
 /** Ollama takes tool schemas in the OpenAI wrapper shape, not as bare specs. */
