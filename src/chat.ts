@@ -1,5 +1,6 @@
 import type { ChatRequest, Chunk, Message, Provider, ToolCall } from "./provider/provider.ts";
 import type { Tool } from "./tools/tool.ts";
+import { compact, type Compact } from "./compact.ts";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 
@@ -77,28 +78,80 @@ export function createChat(
   const messages: Message[] = [{ role: "system", content: system }];
 
   /** One model turn, plus the tool rounds it asks for. */
-  async function* turn(): AsyncIterable<Chunk | Stop | Check> {
+  async function* turn(): AsyncIterable<Chunk | Stop | Check | Compact> {
     let strikes = 0;
     let usedTools = false;
     let checked = false;
+    let retriedFull = false;
 
     for (;;) {
+      // A tool-heavy turn can outgrow the window mid-flight, so the history is
+      // weighed before every round, not only when a turn starts.
+      const removed = await compact(messages, { provider, model, temperature, thinking });
+      if (removed) {
+        yield { type: "compact", removed };
+        // The notes are the model's whole memory now; it continues from a user turn.
+        messages.push({ role: "user", content: "Continue the task from these notes." });
+      }
+
       let reply = "";
       let reasoning = "";
+      let finish: string | undefined;
       const calls: ToolCall[] = [];
       try {
         for await (const chunk of provider.stream({ model, temperature, thinking, tools, messages })) {
           if (chunk.type === "text") reply += chunk.text;
           else if (chunk.type == "reasoning") reasoning += chunk.text;
           else if (chunk.type === "toolCall") calls.push(chunk.call);
+          // A full window is recovered from below; only the final cut-off is reported.
+          else if (chunk.type === "finish") {
+            finish = chunk.reason;
+            if (chunk.reason !== "length") yield chunk;
+            continue;
+          }
           yield chunk;
         }
       } finally {
         // Runs even if the caller stops mid-stream, so history stays consistent.
-        messages.push({ role: "assistant", content: reply, toolCalls: calls, reasoning });
+        // A fully empty message (no text, no calls, no reasoning) is kept out:
+        // there is nothing in it to show or to answer from.
+        if (reply.trim() || reasoning.trim() || calls.length) {
+          messages.push({ role: "assistant", content: reply, toolCalls: calls, reasoning });
+        }
       }
 
       if (!calls.length) {
+        // The window filled mid-answer: the history becomes notes and this round
+        // runs once more on top of them; a second cut-off means there is no way on.
+        if (finish === "length") {
+          if (retriedFull) {
+            yield { type: "finish", reason: "length" };
+            return;
+          }
+          retriedFull = true;
+          const freed = await compact(messages, { provider, model, temperature, thinking }, true);
+          if (!freed) {
+            yield { type: "finish", reason: "length" };
+            return;
+          }
+          yield { type: "compact", removed: freed };
+          messages.push({ role: "user", content: "Your context window filled. Continue the task from these notes." });
+          continue;
+        }
+        // No text and no call is the model stalling, not an answer — ask again.
+        // Counting against the strikes ends the turn if it keeps stalling.
+        if (!reply.trim()) {
+          strikes++;
+          if (strikes > MAX_TOOL_STRIKES) {
+            yield { type: "stop", reason: "stuck" };
+            return;
+          }
+          messages.push({
+            role: "user",
+            content: "You replied with nothing. Continue the task: call a tool or give your answer.",
+          });
+          continue;
+        }
         // One critic pass per turn, and only once tools were involved: that is
         // where an answer can outrun what the tools actually returned.
         if (verify && usedTools && !checked) {
@@ -150,7 +203,9 @@ export function createChat(
   }
 
   return {
-    async *send(input: string): AsyncIterable<Chunk | Stop | Check> {
+    async *send(input: string): AsyncIterable<Chunk | Stop | Check | Compact> {
+      // Compaction runs inside the turn, before every round: the new input
+      // joins the history and the first round weighs it like the rest.
       messages.push({ role: "user", content: input });
       yield* turn();
     },

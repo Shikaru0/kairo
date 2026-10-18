@@ -8,8 +8,9 @@ export interface OllamaOptions {
 /**
  * Ollama's own default is small enough that a tool loop gets silently truncated
  * (it drops the front of the prompt, system message included), so ask for more.
+ * Every round re-sends the whole history, so a tool-heavy turn eats this fast.
  */
-const DEFAULT_CONTEXT_SIZE = 32768;
+const DEFAULT_CONTEXT_SIZE = 65_536;
 
 /** One NDJSON line of `/api/chat`'s stream. */
 interface OllamaChunk {
@@ -44,6 +45,7 @@ export function ollama(
 
   return {
     id: "ollama",
+    contextSize,
     async *stream({ model, messages, tools, temperature, thinking }: ChatRequest) {
       const names = toolNames(messages);
       const response = await fetch(url, {
@@ -58,8 +60,11 @@ export function ollama(
           options: { num_ctx: contextSize, temperature },
         }),
       });
-      if (!response.ok || !response.body) throw new Error(`ollama ${response.status}: ${await response.text()}`);
-
+      //if (!response.ok || !response.body) throw new Error(`ollama ${response.status}: ${await response.text()}`);
+      if (!response.body) { //(!response.ok || !response.body) {
+        console.log(response);
+        return;
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";

@@ -18,9 +18,13 @@ async function sessionPath(id: string) {
 const sessionId = process.argv[2] || DEFAULT_SESSION;
 let sessionFile = await sessionPath(sessionId);
 
-const provider = ollama();
+const provider = ollama(process.env.OLLAMA_HOST, {
+  // Bigger window on purpose: every round re-sends the whole history.
+  // KAIRO_CONTEXT dials it down when the GPU cannot hold the cache.
+  contextSize: Number(process.env.KAIRO_CONTEXT) || undefined,
+});
 /** Model settings, shared with the subagents the `task` tool spawns. */
-const settings = { model: "qwen3.5:4b", temperature: 0.5, thinking: true } as const;
+const settings = { model: "qwen3.5:4b", temperature: 0.5, thinking: "high" } as const;
 const chat = createChat(provider, { ...settings, tools: createTools({ provider, ...settings }) });
 
 if (existsSync(sessionFile)) {
@@ -141,34 +145,43 @@ for await (const line of rl) {
 
   if (input) {
     let inThinking = false;
-    for await (const chunk of chat.send(input)) {
-      if (chunk.type === "reasoning") {
-        if (!inThinking) {
-          inThinking = true;
-          process.stdout.write("\x1b[2m[thinking] ");
+    try {
+      for await (const chunk of chat.send(input)) {
+        if (chunk.type === "reasoning") {
+          if (!inThinking) {
+            inThinking = true;
+            process.stdout.write("\x1b[2m[thinking] ");
+          }
+          process.stdout.write(chunk.text);
+          continue;
         }
-        process.stdout.write(chunk.text);
-        continue;
+        if (inThinking) {
+          inThinking = false;
+          process.stdout.write("\x1b[0m\n\n");
+        }
+        if (chunk.type === "text") process.stdout.write(chunk.text);
+        else if (chunk.type === "toolCall") process.stdout.write(`\x1b[2m[tool] ${chunk.call.name}(${chunk.call.arguments})\x1b[0m\n\n`);
+        else if (chunk.type === "finish" && chunk.reason === "length") process.stdout.write("\x1b[2m[cut off: hit the model's context/token limit]\x1b[0m\n\n");
+        else if (chunk.type === "stop" && chunk.reason === "stuck") {
+          process.stdout.write("\x1b[2m[stopped: tool calls kept failing]\x1b[0m\n\n");
+        } else if (chunk.type === "compact") {
+          process.stdout.write(`\x1b[2m[context compacted: ${chunk.removed} messages -> summary]\x1b[0m\n\n`);
+        } else if (chunk.type === "check") {
+          process.stdout.write(
+            chunk.revised
+              ? `\x1b[2m[self-check] ${chunk.verdict}\x1b[0m\n\n`
+              : "\x1b[2m[self-check] ok\x1b[0m\n\n",
+          );
+        }
       }
-      if (inThinking) {
-        inThinking = false;
-        process.stdout.write("\x1b[0m\n\n");
-      }
-      if (chunk.type === "text") process.stdout.write(chunk.text);
-      else if (chunk.type === "toolCall") process.stdout.write(`\x1b[2m[tool] ${chunk.call.name}(${chunk.call.arguments})\x1b[0m\n\n`);
-      else if (chunk.type === "finish" && chunk.reason === "length") process.stdout.write("\x1b[2m[cut off: hit the model's context/token limit]\x1b[0m\n\n");
-      else if (chunk.type === "stop" && chunk.reason === "stuck") {
-        process.stdout.write("\x1b[2m[stopped: tool calls kept failing]\x1b[0m\n\n");
-      } else if (chunk.type === "check") {
-        process.stdout.write(
-          chunk.revised
-            ? `\x1b[2m[self-check] ${chunk.verdict}\x1b[0m\n\n`
-            : "\x1b[2m[self-check] ok\x1b[0m\n\n",
-        );
-      }
+      if (inThinking) process.stdout.write("\x1b[0m");
+      process.stdout.write("\n\n");
+    } catch (error) {
+      // A dead provider must not take the session with it: report, keep the history, stay in the REPL.
+      if (inThinking) process.stdout.write("\x1b[0m");
+      const message = error instanceof Error ? error.message : String(error);
+      process.stdout.write(`\x1b[2m[provider error: ${message}]\x1b[0m\n\n`);
     }
-    if (inThinking) process.stdout.write("\x1b[0m");
-    process.stdout.write("\n\n");
     await save();
   }
 

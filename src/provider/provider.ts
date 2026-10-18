@@ -54,6 +54,11 @@ export type Chunk =
 export interface Provider {
   /** Identifier of this provider, e.g. "ollama". */
   readonly id: string;
+  /**
+   * Context window in tokens the provider will actually serve, so callers can
+   * size their work against it. Absent when the limit is unknown.
+   */
+  readonly contextSize?: number;
   /** Stream a completion, yielding chunks in the order the model produced them. */
   stream(request: ChatRequest): AsyncIterable<Chunk>;
 }
