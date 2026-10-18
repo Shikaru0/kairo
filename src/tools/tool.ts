@@ -1,5 +1,6 @@
 import type { ToolSpec } from "../provider/provider.ts";
 import { readTool } from "./read.ts";
+import { grepTool } from "./grep.ts";
 import { writeTool } from "./write.ts";
 import { editTool } from "./edit.ts";
 import { bashTool } from "./bash.ts";
@@ -23,7 +24,7 @@ const MAX_SPAWN_DEPTH = 2;
  * rather than by asking the model to behave.
  */
 export function createTools(agent: Agent, depth = MAX_SPAWN_DEPTH): Tool[] {
-  const tools: Tool[] = [todoTool, readTool, writeTool, editTool, bashTool];
+  const tools: Tool[] = [todoTool, grepTool, readTool, writeTool, editTool, bashTool];
   if (depth <= 0) return tools;
   // `model` carries the chosen model down: a subagent spawned on a smaller model
   // keeps it as the default for anything it spawns in turn.
