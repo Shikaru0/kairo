@@ -6,6 +6,7 @@ import { editTool } from "./edit.ts";
 import { bashTool } from "./bash.ts";
 import { todoTool } from "./todo.ts";
 import { taskTool, type Agent } from "./task.ts";
+import { bgTool } from "./bg.ts";
 
 /** A capability the app can run when the model asks for it. */
 export interface Tool extends ToolSpec {
@@ -26,11 +27,12 @@ const MAX_SPAWN_DEPTH = 2;
 export function createTools(agent: Agent, depth = MAX_SPAWN_DEPTH): Tool[] {
   const tools: Tool[] = [todoTool, grepTool, readTool, writeTool, editTool, bashTool];
   if (depth <= 0) return tools;
-  // `model` carries the chosen model down: a subagent spawned on a smaller model
-  // keeps it as the default for anything it spawns in turn.
-  return [
+  // `bg` closes over the finished list, so it backgrounds exactly the calls its own agent has.
+  const all: Tool[] = [
     todoTool,
     taskTool(agent, (model) => createTools({ ...agent, model }, depth - 1)),
+    bgTool(() => all),
     ...tools.slice(1),
   ];
+  return all;
 }
