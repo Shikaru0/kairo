@@ -6,6 +6,7 @@ export const readTool: Tool = {
   name: "read",
   description:
     "Read a text file and return its contents, optionally a slice of its lines. " +
+    "Each line is prefixed with its line number. " +
     "Pass offset/limit if you only need a specific part of it.",
   parameters: {
     type: "object",
@@ -17,12 +18,14 @@ export const readTool: Tool = {
     required: ["path"],
   },
   execute: async ({ path, offset, limit }) => {
-    const text = await readFile(String(path), "utf8");
-    if (offset == null && limit == null) return text;
-
-    const lines = text.split("\n");
+    const lines = (await readFile(String(path), "utf8")).split("\n");
     const start = offset == null ? 0 : Math.max(0, Number(offset) - 1);
-    const end = limit == null ? undefined : start + Number(limit);
-    return lines.slice(start, end).join("\n");
+    const end = limit == null ? lines.length : start + Number(limit);
+    // The number is the real file line, so offset/limit round-trip: what the
+    // model cites is what the next read (or edit) will show.
+    return lines
+      .slice(start, end)
+      .map((line, i) => `${start + i + 1}: ${line}`)
+      .join("\n");
   },
 };
