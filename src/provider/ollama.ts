@@ -13,7 +13,7 @@ export interface OllamaOptions {
 const DEFAULT_CONTEXT_SIZE = 65_536;
 
 /** Transient failures get this many retries, on a fixed delay, per request. */
-const RETRIES = 5;
+export const RETRIES = 5;
 const RETRY_DELAY_MS = 2_000;
 
 /** One NDJSON line of `/api/chat`'s stream. */
