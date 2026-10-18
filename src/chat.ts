@@ -73,8 +73,10 @@ export interface ChatOptions extends Omit<ChatRequest, "messages" | "tools"> {
  */
 export function createChat(
   provider: Provider,
-  { model, temperature, thinking, system = DEFAULT_SYSTEM, tools = [], verify = true }: ChatOptions,
+  { model: startModel, temperature, thinking, system = DEFAULT_SYSTEM, tools = [], verify = true }: ChatOptions,
 ) {
+  /** Swappable at runtime (`/model`), so a let: future turns run on whatever it holds. */
+  let model = startModel;
   const messages: Message[] = [{ role: "system", content: system }];
 
   /** One model turn, plus the tool rounds it asks for. */
@@ -220,6 +222,10 @@ export function createChat(
     /** Clear all messages and restore the system prompt. */
     reset() {
       messages.splice(0, messages.length, { role: "system", content: system });
+    },
+    /** Swap the model future turns run on; the history carries over as-is. */
+    setModel(next: string) {
+      model = next;
     },
   };
 }

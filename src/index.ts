@@ -23,9 +23,16 @@ const provider = ollama(process.env.OLLAMA_HOST, {
   // KAIRO_CONTEXT dials it down when the GPU cannot hold the cache.
   contextSize: Number(process.env.KAIRO_CONTEXT) || undefined,
 });
+/** The model everything runs on; `/model` swaps it, and turns plus new subagents follow. */
+let model = "qwen3.5:4b";
 /** Model settings, shared with the subagents the `task` tool spawns. */
-const settings = { model: "qwen3.5:4b", temperature: 0.5, thinking: "high" } as const;
-const chat = createChat(provider, { ...settings, tools: createTools({ provider, ...settings }) });
+const settings = { temperature: 0.5, thinking: "high" } as const;
+const chat = createChat(provider, {
+  model,
+  ...settings,
+  // A getter, not a copy: a subagent started after `/model` defaults to the new model.
+  tools: createTools({ provider, get model() { return model; }, ...settings }),
+});
 
 if (existsSync(sessionFile)) {
   try {
@@ -112,6 +119,16 @@ for await (const line of rl) {
     if (!closed) rl.prompt();
     continue;
   }
+  if (input === "/model" || input.startsWith("/model ")) {
+    const next = input.slice(6).trim();
+    if (next) {
+      model = next;
+      chat.setModel(next);
+    }
+    process.stdout.write(`\x1b[2m[using ${model}]\x1b[0m\n\n`);
+    if (!closed) rl.prompt();
+    continue;
+  }
   if (input === "/clear") {
     chat.reset();
     await save();
@@ -138,7 +155,7 @@ for await (const line of rl) {
     continue;
   }
   if (input === "/help") {
-    process.stdout.write("/new /clear /history /use <id> /save <id> /ls /exit\n\n");
+    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /ls /exit\n\n");
     if (!closed) rl.prompt();
     continue;
   }
