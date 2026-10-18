@@ -132,7 +132,7 @@ for await (const line of rl) {
   }
   if (input === "/compact") {
     const snapshot = chat.dump();
-    const removed = await compact(snapshot, { provider, model, temperature: settings.temperature, thinking: settings.thinking }, true);
+    const removed = await compact(snapshot, { provider, model, temperature: settings.temperature }, true);
     if (removed) {
       chat.load(snapshot);
       await save();

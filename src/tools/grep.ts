@@ -15,7 +15,9 @@ export const grepTool: Tool = {
   description:
     "Search file contents with a ripgrep regex; results are path:line:text and .gitignore is respected. " +
     "`path` scopes the search (defaults to the working directory), `include` filters files by glob " +
-    "like **/*.ts, and `limit` caps matches per file.",
+    "like **/*.ts, and `limit` caps matches per file. " +
+    "Use when: locating where a symbol, name, config key or error string lives - the first step when " +
+    "exploring an unfamiliar project; prefer it over running grep through bash.",
   parameters: {
     type: "object",
     properties: {

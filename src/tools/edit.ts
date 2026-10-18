@@ -7,7 +7,12 @@ import type { Tool } from "./tool.ts";
  */
 export const editTool: Tool = {
   name: "edit",
-  description: "Replace exact text in a file. oldString must match exactly once unless replaceAll is true.",
+  description:
+    "Replace exact text in a file. " +
+    "Use when: changing an existing file with a small, exact replacement; new files and full rewrites go to write. " +
+    "Read the file first and copy oldString verbatim from that read, " +
+    "stripping the line-number prefixes read adds - they are not part of the file. " +
+    "oldString must match exactly once unless replaceAll is true; if it does not match, re-read instead of guessing.",
   parameters: {
     type: "object",
     properties: {

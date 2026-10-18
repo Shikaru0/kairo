@@ -21,8 +21,10 @@ export function bgTool(tools: () => Tool[]): Tool {
     description:
       "Run another tool call in the background, like a subagent: start one with { tool, args } and it " +
       "keeps running while you take your own steps. Collect with { id }; collecting waits for the call " +
-      "to finish, so only collect once you have no independent work left. Made for long bash commands " +
-      "(builds, tests, installs). Do not background a call your current steps depend on.",
+      "to finish, so only collect once you have no independent work left. " +
+      "Use when: a command will run longer than a few seconds (build, test, install) and you have your own " +
+      "steps to do meanwhile; anything quick, just call the tool directly. " +
+      "Do not background a call your current steps depend on.",
     parameters: {
       type: "object",
       properties: {

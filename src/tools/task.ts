@@ -3,8 +3,10 @@ import type { ChatRequest, Provider } from "../provider/provider.ts";
 import type { Tool } from "./tool.ts";
 
 const SUBAGENT_SYSTEM =
-  "You are a subagent with exactly one task. Work it with the tools, then answer with only what the " +
-  "caller needs: exact paths, values and conclusions, no preamble. Nothing can answer a question back.";
+  "You are a subagent with exactly one task, and nothing can answer a question back: " +
+  "make reasonable assumptions and state them instead of asking. " +
+  "Work the task with the tools, then answer with only what the caller needs: " +
+  "exact paths, values and conclusions, no preamble.";
 
 /** What a subagent runs on: the parent's provider and defaults, overridable per spawn. */
 export interface Agent extends Omit<ChatRequest, "messages" | "tools"> {
@@ -59,7 +61,10 @@ export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
     name: "task",
     description:
       "Start a subagent on one self-contained task; it runs in the background and hands back an id " +
-      "immediately, so it works while you take your own steps. Call again with { id } to collect the " +
+      "immediately, so it works while you take your own steps. " +
+      "Use when: a step is bulky and self-contained - scanning many files, repetitive changes, independent " +
+      "research - and your own steps must keep moving meanwhile; quick steps, do them yourself. " +
+      "Call again with { id } to collect the " +
       "answer. `model` runs it on a different pulled model — bash `ollama list` shows what is pulled — " +
       "so easy work can go to a fast small model and hard work to a bigger one. Nesting: a subagent " +
       "gets this same tool one level shallower, and at the bottom it is simply absent, so depth is " +

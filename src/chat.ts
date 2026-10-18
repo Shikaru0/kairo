@@ -5,25 +5,26 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const DEFAULT_SYSTEM =
-  "You are a coding agent working in a loop: understand, plan, act, verify. " +
-  "Think before you act: reason step by step about what you know and what is unknown, " +
-  "then say why the next action is the right one. " +
-  "If a task needs more than one step, call the todo tool to write the plan before acting, " +
-  "then update it as steps start and finish. Skip the plan for a single straightforward step. " +
-  "Read each tool result before the next step, and revise the plan when a step fails " +
-  "instead of repeating it. " +
-  "Subagents can take work off your hands: start a task subagent for a bulky step, keep going on your " +
-  "own steps while it runs, then collect its answer. " +
-  "Be concise; prefer the smallest change that works.";
+  "You are a coding agent working in a loop: think, act with a tool, read the result, repeat until the task is done. " +
+  "Don't guess projects: get the needed context first. " +
+  "Before editing a file, read it first and copy oldString exactly from that read; never edit from memory. " +
+  "When a tool call fails or its result surprises you, re-read the situation and change the approach instead of repeating the call. " +
+  "Find facts with the tools: grep for names and symbols, read for file contents, bash for commands, builds and tests. " +
+  "Plan multi-step work with todo and update it as steps finish; skip the plan for a single step. " +
+  "Self-contained bulky work can go to task (a subagent) or bg (a background call) so your own steps keep moving; collect when you run out of them. " +
+  "Think in your reasoning about what is known, what is unknown, and why the next action is the right one. " +
+  "Keep replies short; when done, state what changed in one or two sentences.";
 
 /**
  * Prompt for the critic pass: it judges the answer against the task and what the
  * tools actually returned, not against how confident the answer sounds.
  */
 const CRITIC_SYSTEM =
-  "You check one answer against the task and the tool results in this conversation. " +
-  "Reply with exactly OK if it is correct, complete and supported by the tool results. " +
-  "Otherwise reply with one short paragraph naming what is wrong or unsupported.";
+  "You check one answer against the task it was given. Three checks, in order: " +
+  "1) it does what the task actually asked, " +
+  "2) every claim in it matches a tool result in this conversation - nothing invented, " +
+  "3) it is complete, not cut off mid-solution. " +
+  "If all three hold, reply with exactly OK. Otherwise name the single most important problem in one sentence.";
 
 /**
  * How many tool rounds may fail in a row before the turn gives up. The point is
@@ -89,7 +90,7 @@ export function createChat(
     for (;;) {
       // A tool-heavy turn can outgrow the window mid-flight, so the history is
       // weighed before every round, not only when a turn starts.
-      const removed = await compact(messages, { provider, model, temperature, thinking });
+      const removed = await compact(messages, { provider, model, temperature });
       if (removed) {
         yield { type: "compact", removed };
         // The notes are the model's whole memory now; it continues from a user turn.
@@ -131,7 +132,7 @@ export function createChat(
             return;
           }
           retriedFull = true;
-          const freed = await compact(messages, { provider, model, temperature, thinking }, true);
+          const freed = await compact(messages, { provider, model, temperature }, true);
           if (!freed) {
             yield { type: "finish", reason: "length" };
             return;

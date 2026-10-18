@@ -38,7 +38,7 @@ export interface Compact {
 }
 
 /** What compaction needs from the chat it serves. */
-type Context = { provider: Provider } & Pick<ChatRequest, "model" | "temperature" | "thinking">;
+type Context = { provider: Provider } & Pick<ChatRequest, "model" | "temperature">;
 
 /**
  * Compact the history when it fills the provider's window: everything after
@@ -59,6 +59,9 @@ export async function compact(messages: Message[], ctx: Context, force = false):
   } catch {
     return 0;
   }
+  // A summariser that produced nothing must not replace the history: keeping
+  // the full conversation beats compaction to a placeholder.
+  if (!notes) return 0;
 
   messages.splice(1, older.length, { role: "assistant", content: NOTES_PREFIX + notes });
   return older.length;
@@ -70,10 +73,13 @@ async function summarise(older: Message[], ctx: Context): Promise<string> {
   for await (const chunk of ctx.provider.stream({
     model: ctx.model,
     temperature: ctx.temperature,
-    thinking: ctx.thinking,
+    // Reasoning off on purpose: with it on, this model can spend the whole
+    // generation thinking and return empty content — which would otherwise
+    // replace the history with nothing.
+    thinking: false,
     messages: [{ role: "system", content: COMPACT_SYSTEM }, ...older],
   })) {
     if (chunk.type === "text") out += chunk.text;
   }
-  return out.trim().slice(0, NOTES_CAP) || "(no summary produced)";
+  return out.trim().slice(0, NOTES_CAP);
 }

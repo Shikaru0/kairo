@@ -27,7 +27,11 @@ process.on("exit", () => {
  */
 export const bashTool: Tool = {
   name: "bash",
-  description: "Run a shell command and return its output.",
+  description:
+    "Run a shell command and return its output. " +
+    "Use when: a real command must run - builds, tests, git, installs, or listing directories (ls, find by name); " +
+    "not for searching file contents (that is grep) or reading files (that is read). " +
+    "A non-zero exit comes back as exit N with its output attached - read it instead of re-running the command.",
   parameters: {
     type: "object",
     properties: {

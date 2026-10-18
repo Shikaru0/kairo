@@ -5,7 +5,9 @@ import type { Tool } from "./tool.ts";
 /** Writes text to disk, creating parent dirs; failures surface to the model as an error result. */
 export const writeTool: Tool = {
   name: "write",
-  description: "Write text content to a file, overwriting it if it exists.",
+  description:
+    "Write text content to a file, overwriting it if it exists. " +
+    "Use when: creating a new file or replacing one entirely; small changes to an existing file go to edit instead.",
   parameters: {
     type: "object",
     properties: {

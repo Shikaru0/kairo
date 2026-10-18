@@ -7,6 +7,7 @@ export const readTool: Tool = {
   description:
     "Read a text file and return its contents, optionally a slice of its lines. " +
     "Each line is prefixed with its line number. " +
+    "Use when: you need what is in a file - always before editing it. " +
     "Pass offset/limit if you only need a specific part of it.",
   parameters: {
     type: "object",
