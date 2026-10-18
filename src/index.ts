@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createChat } from "./chat.ts";
+import { compact } from "./compact.ts";
 import { ollama } from "./provider/ollama.ts";
 import { createTools } from "./tools/tool.ts";
 import type { Message } from "./provider/provider.ts";
@@ -129,6 +130,19 @@ for await (const line of rl) {
     if (!closed) rl.prompt();
     continue;
   }
+  if (input === "/compact") {
+    const snapshot = chat.dump();
+    const removed = await compact(snapshot, { provider, model, temperature: settings.temperature, thinking: settings.thinking }, true);
+    if (removed) {
+      chat.load(snapshot);
+      await save();
+      process.stdout.write(`\x1b[2m[compacted: ${removed} messages -> summary]\x1b[0m\n\n`);
+    } else {
+      process.stdout.write("\x1b[2m[nothing to compact]\x1b[0m\n\n");
+    }
+    if (!closed) rl.prompt();
+    continue;
+  }
   if (input === "/clear") {
     chat.reset();
     await save();
@@ -155,7 +169,7 @@ for await (const line of rl) {
     continue;
   }
   if (input === "/help") {
-    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /ls /exit\n\n");
+    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /compact /ls /exit\n\n");
     if (!closed) rl.prompt();
     continue;
   }
