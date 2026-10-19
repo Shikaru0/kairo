@@ -7,6 +7,8 @@ import { bashTool } from "./bash.ts";
 import { todoTool } from "./todo.ts";
 import { taskTool, type Agent } from "./task.ts";
 import { bgTool } from "./bg.ts";
+import { webFetchTool } from "./web/webfetch.ts";
+import { webSearchTool } from "./web/websearch.ts";
 
 /** A capability the app can run when the model asks for it. */
 export interface Tool extends ToolSpec {
@@ -25,7 +27,7 @@ const MAX_SPAWN_DEPTH = 2;
  * rather than by asking the model to behave.
  */
 export function createTools(agent: Agent, depth = MAX_SPAWN_DEPTH): Tool[] {
-  const tools: Tool[] = [todoTool, grepTool, readTool, writeTool, editTool, bashTool];
+  const tools: Tool[] = [todoTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool];
   if (depth <= 0) return tools;
   // `bg` closes over the finished list, so it backgrounds exactly the calls its own agent has.
   const all: Tool[] = [

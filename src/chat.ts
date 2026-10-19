@@ -1,12 +1,13 @@
 import type { ChatRequest, Chunk, Message, Provider, ToolCall } from "./provider/provider.ts";
 import type { Tool } from "./tools/tool.ts";
-import { compact, type Compact } from "./compact.ts";
+import { compact, freeSpace, type Compact } from "./compact.ts";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const DEFAULT_SYSTEM =
   "You are a coding agent working in a loop: think, act with a tool, read the result, repeat until the task is done. " +
   "Don't guess projects: get the needed context first. " +
+  "Use tools in batches or in parallel when you already know which tool calls you want to do. " +
   "Before editing a file, read it first and copy oldString exactly from that read; never edit from memory. " +
   "When a tool call fails or its result surprises you, re-read the situation and change the approach instead of repeating the call. " +
   "Find facts with the tools: grep for names and symbols, read for file contents, bash for commands, builds and tests. " +
@@ -96,6 +97,10 @@ export function createChat(
         // The notes are the model's whole memory now; it continues from a user turn.
         messages.push({ role: "user", content: "Continue the task from these notes." });
       }
+
+      // Refreshed every round: the model's only sense of the clock, of where the
+      // process runs, and of how much window it has left to spend on gathering.
+      messages[0] = { role: "system", content: `${system}\n\n${turnContext(freeSpace(messages, provider))}` };
 
       let reply = "";
       let reasoning = "";
@@ -251,6 +256,20 @@ async function spillResult(name: string, content: string): Promise<string> {
     where = "could not save the full output";
   }
   return `${head}\n[output too large (${content.length} chars); ${where}]\n${tail}`;
+}
+
+/**
+ * Appended to the system prompt before every round. None of this is knowable
+ * to the model otherwise, and one-call-per-round is exactly what a model does
+ * when it cannot see the clock or how much window is left.
+ */
+function turnContext(free: number): string {
+  return (
+    `[turn context — ${new Date().toISOString().slice(11, 16)} UTC · cwd ${process.cwd()} · ` +
+    `${Math.round(free * 100)}% of the window free] ` +
+    "Batch the independent tool calls you already know you need into one response; " +
+    "when the window runs low, stop gathering and answer from what you have."
+  );
 }
 
 /**

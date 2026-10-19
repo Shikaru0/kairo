@@ -41,14 +41,23 @@ export interface Compact {
 type Context = { provider: Provider } & Pick<ChatRequest, "model" | "temperature">;
 
 /**
+ * Rough share of the provider's window still free, 0..1, by the same estimate
+ * compaction weighs. Kept in one place so a nudge and a compaction agree on
+ * how full the window is.
+ */
+export function freeSpace(messages: Message[], provider: Provider): number {
+  const window = (provider.contextSize ?? DEFAULT_CONTEXT_SIZE) * CHARS_PER_TOKEN;
+  return Math.max(0, 1 - JSON.stringify(messages).length / window);
+}
+
+/**
  * Compact the history when it fills the provider's window: everything after
  * the system prompt becomes a summary. Returns how many messages were
  * replaced, or 0 when the history is still small or the summariser failed —
  * the caller then keeps the full history, unchanged.
  */
 export async function compact(messages: Message[], ctx: Context, force = false): Promise<number> {
-  const window = (ctx.provider.contextSize ?? DEFAULT_CONTEXT_SIZE) * CHARS_PER_TOKEN;
-  if (!force && JSON.stringify(messages).length < COMPACT_AT * window) return 0;
+  if (!force && freeSpace(messages, ctx.provider) > 1 - COMPACT_AT) return 0;
 
   const older = messages.slice(1);
   if (older.length === 0) return 0;
