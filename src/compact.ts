@@ -37,6 +37,24 @@ export interface Compact {
   removed: number;
 }
 
+/** Emitted when older tool results were elided instead, the cheaper of the two. */
+export interface Trim {
+  type: "trim";
+  elided: number;
+}
+
+/**
+ * Small compaction runs first, at a lower watermark than the summariser: older
+ * tool results keep only their head. A dump that has already been read does not
+ * need re-sending in full every round, and the recent messages — the ones the
+ * model is actually working from — stay verbatim.
+ */
+const TRIM_AT = 0.4;
+/** Messages at the end of the history that trimming never touches. */
+const TRIM_KEEP_TAIL = 6;
+/** How much of each older tool result survives. */
+const TRIM_KEEP_CHARS = 500;
+
 /** What compaction needs from the chat it serves. */
 type Context = { provider: Provider } & Pick<ChatRequest, "model" | "temperature">;
 
@@ -48,6 +66,30 @@ type Context = { provider: Provider } & Pick<ChatRequest, "model" | "temperature
 export function freeSpace(messages: Message[], provider: Provider): number {
   const window = (provider.contextSize ?? DEFAULT_CONTEXT_SIZE) * CHARS_PER_TOKEN;
   return Math.max(0, 1 - JSON.stringify(messages).length / window);
+}
+
+/**
+ * Elide the middle of older tool results, newest messages left alone. Returns
+ * how many results were elided, or 0 when the window still has room or there is
+ * nothing long enough to be worth trimming. Cheap and lossless-ish, so it runs
+ * before the summariser rather than instead of it.
+ */
+export function trim(messages: Message[], provider: Provider): number {
+  if (freeSpace(messages, provider) > 1 - TRIM_AT) return 0;
+
+  let elided = 0;
+  const last = Math.max(1, messages.length - TRIM_KEEP_TAIL);
+  for (let i = 1; i < last; i++) {
+    const message = messages[i];
+    if (message?.role !== "tool" || message.content.length <= TRIM_KEEP_CHARS) continue;
+    messages[i] = {
+      role: "tool",
+      toolCallId: message.toolCallId,
+      content: `${message.content.slice(0, TRIM_KEEP_CHARS)}\n[trimmed ${message.content.length} chars from this result]`,
+    };
+    elided++;
+  }
+  return elided;
 }
 
 /**

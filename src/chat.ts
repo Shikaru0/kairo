@@ -1,6 +1,6 @@
 import type { ChatRequest, Chunk, Message, Provider, ToolCall } from "./provider/provider.ts";
 import type { Tool } from "./tools/tool.ts";
-import { compact, freeSpace, type Compact } from "./compact.ts";
+import { compact, freeSpace, trim, type Compact, type Trim } from "./compact.ts";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 
@@ -90,7 +90,7 @@ export function createChat(
   const messages: Message[] = [{ role: "system", content: system }];
 
   /** One model turn, plus the tool rounds it asks for. */
-  async function* turn(): AsyncIterable<Chunk | Stop | Check | Compact> {
+  async function* turn(): AsyncIterable<Chunk | Stop | Check | Compact | Trim> {
     let strikes = 0;
     let usedTools = false;
     let checked = false;
@@ -99,6 +99,12 @@ export function createChat(
     const seen = new Map<string, number>();
 
     for (;;) {
+      // Small compaction first: eliding the middles of old tool results is cheap
+      // and keeps recent turns verbatim; the summariser is what runs when that
+      // alone does not free enough.
+      const elided = trim(messages, provider);
+      if (elided) yield { type: "trim", elided };
+
       // A tool-heavy turn can outgrow the window mid-flight, so the history is
       // weighed before every round, not only when a turn starts.
       const removed = await compact(messages, { provider, model, temperature });
@@ -242,7 +248,7 @@ export function createChat(
   }
 
   return {
-    async *send(input: string): AsyncIterable<Chunk | Stop | Check | Compact> {
+    async *send(input: string): AsyncIterable<Chunk | Stop | Check | Compact | Trim> {
       // Compaction runs inside the turn, before every round: the new input
       // joins the history and the first round weighs it like the rest.
       messages.push({ role: "user", content: input });

@@ -197,6 +197,8 @@ for await (const line of rl) {
           process.stdout.write("\x1b[2m[stopped: tool calls kept failing]\x1b[0m\n\n");
         } else if (chunk.type === "compact") {
           process.stdout.write(`\x1b[2m[context compacted: ${chunk.removed} messages -> summary]\x1b[0m\n\n`);
+        } else if (chunk.type === "trim") {
+          process.stdout.write(`\x1b[2m[context trimmed: ${chunk.elided} old tool results shortened]\x1b[0m\n\n`);
         } else if (chunk.type === "check") {
           process.stdout.write(
             chunk.revised
