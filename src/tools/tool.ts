@@ -24,15 +24,17 @@ const MAX_SPAWN_DEPTH = 2;
  * for the first tools it reads, so planning (`todo`) and delegation (`task`) sit
  * where the model will find them. Each spawn re-enters with `depth - 1`, and at
  * zero there is no `task` tool at all — so nesting is bounded by construction
- * rather than by asking the model to behave.
+ * rather than by asking the model to behave. `extra` is what the plugins brought:
+ * every agent may use them, subagents included; they sit last because a model
+ * looks for a builtin first.
  */
-export function createTools(agent: Agent, depth = MAX_SPAWN_DEPTH): Tool[] {
-  const tools: Tool[] = [todoTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool];
+export function createTools(agent: Agent, extra: Tool[] = [], depth = MAX_SPAWN_DEPTH): Tool[] {
+  const tools: Tool[] = [todoTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
   if (depth <= 0) return tools;
   // `bg` closes over the finished list, so it backgrounds exactly the calls its own agent has.
   const all: Tool[] = [
     todoTool,
-    taskTool(agent, (model) => createTools({ ...agent, model }, depth - 1)),
+    taskTool(agent, (model) => createTools({ ...agent, model }, extra, depth - 1)),
     bgTool(() => all),
     ...tools.slice(1),
   ];

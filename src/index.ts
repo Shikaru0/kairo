@@ -2,10 +2,12 @@ import * as readline from "node:readline/promises";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { createChat } from "./chat.ts";
+import { createChat, DEFAULT_SYSTEM } from "./chat.ts";
 import { compact } from "./compact.ts";
+import { loadPlugins, mcpInstructions, skillCatalog } from "./plugins/plugin.ts";
 import { ollama } from "./provider/ollama.ts";
 import { createTools } from "./tools/tool.ts";
+import { skillTool } from "./tools/skill.ts";
 import type { Message } from "./provider/provider.ts";
 
 const SESSIONS_DIR = ".kairo-sessions";
@@ -28,11 +30,32 @@ const provider = ollama(process.env.OLLAMA_HOST, {
 let model = "qwen3.5:4b";
 /** Model settings, shared with the subagents the `task` tool spawns. */
 const settings = { temperature: 0.5, thinking: "high" } as const;
+// Agent Plugins: skills go into the prompt, MCP tools into every agent's list.
+// Loading never throws; whatever went wrong is in `notes` and reported below.
+const plugins = await loadPlugins();
+for (const note of plugins.notes) process.stdout.write(`\x1b[2m[plugin] ${note}\x1b[0m\n`);
+if (plugins.skills.length || plugins.tools.length || plugins.prompts.length) {
+  process.stdout.write(
+    `\x1b[2m[plugins: ${plugins.skills.length} skills, ${plugins.tools.length} tools, ${plugins.prompts.length} prompts]\x1b[0m\n`,
+  );
+}
+// The user's and project's own AGENTS.md, then each plugin's, then the skill catalog,
+// then any MCP server instructions: standing rules first, followed by what the model
+// can look up and what the servers say.
+const contributed = [
+  ...plugins.prompts.map((prompt) => prompt.text),
+  skillCatalog(plugins.skills),
+  mcpInstructions(plugins.instructions),
+].filter(Boolean).join("\n\n");
 const chat = createChat(provider, {
   model,
   ...settings,
+  system: contributed ? `${DEFAULT_SYSTEM}\n\n${contributed}` : undefined,
   // A getter, not a copy: a subagent started after `/model` defaults to the new model.
-  tools: createTools({ provider, get model() { return model; }, ...settings }),
+  tools: createTools({ provider, get model() { return model; }, ...settings }, [
+    ...(plugins.skills.length ? [skillTool(plugins.skills)] : []),
+    ...plugins.tools,
+  ]),
 });
 
 if (existsSync(sessionFile)) {
@@ -168,8 +191,27 @@ for await (const line of rl) {
     if (!closed) rl.prompt();
     continue;
   }
+  if (input === "/plugins") {
+    for (const note of plugins.notes) process.stdout.write(`\x1b[2m[plugin] ${note}\x1b[0m\n`);
+    for (const skill of plugins.skills) process.stdout.write(`\x1b[2m[skill] ${skill.name} - ${skill.location}\x1b[0m\n`);
+    for (const tool of plugins.tools) process.stdout.write(`\x1b[2m[tool] ${tool.name}\x1b[0m\n`);
+    for (const prompt of plugins.prompts) process.stdout.write(`\x1b[2m[prompt] ${prompt.source} (${prompt.text.length} chars)\x1b[0m\n`);
+    for (const item of plugins.instructions) process.stdout.write(`\x1b[2m[mcp] ${item.server}: ${item.text.split("\n")[0]}\x1b[0m\n`);
+    if (
+      !plugins.skills.length &&
+      !plugins.tools.length &&
+      !plugins.prompts.length &&
+      !plugins.instructions.length &&
+      !plugins.notes.length
+    ) {
+      process.stdout.write("\x1b[2m[no plugins]\x1b[0m\n");
+    }
+    process.stdout.write("\n");
+    if (!closed) rl.prompt();
+    continue;
+  }
   if (input === "/help") {
-    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /compact /ls /exit\n\n");
+    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /compact /plugins /ls /exit\n\n");
     if (!closed) rl.prompt();
     continue;
   }

@@ -4,7 +4,7 @@ import { compact, freeSpace, trim, type Compact, type Trim } from "./compact.ts"
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 
-const DEFAULT_SYSTEM =
+export const DEFAULT_SYSTEM =
   "You are a coding agent working in a loop: think, act with a tool, read the result, repeat until the task is done. " +
   "Don't guess projects: get the needed context first. " +
   "Use tools in batches or in parallel when you already know which tool calls you want to do. " +
