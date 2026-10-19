@@ -34,6 +34,14 @@ const CRITIC_SYSTEM =
 const MAX_TOOL_STRIKES = 8;
 
 /**
+ * How many times one identical call (same tool, same arguments) may run in a
+ * single turn. The one after that is refused: re-issuing a call whose result is
+ * already in the history is a loop, not progress. Counted per turn, so the same
+ * call in a later turn — a test rerun after an edit, say — is fine.
+ */
+const MAX_IDENTICAL_CALLS = 4;
+
+/**
  * A tool result larger than this has its full text saved to a file, and only a
  * head and a tail of it stay in context, noted with the path so the model can
  * read the rest with offset/limit. High on purpose: ordinary results never
@@ -87,6 +95,8 @@ export function createChat(
     let usedTools = false;
     let checked = false;
     let retriedFull = false;
+    /** Identical calls seen this turn, with the verdict `run`-or-block for each. */
+    const seen = new Map<string, number>();
 
     for (;;) {
       // A tool-heavy turn can outgrow the window mid-flight, so the history is
@@ -181,7 +191,28 @@ export function createChat(
 
       // Calls in one response are independent, so run them together; results
       // still go back in call order, which is what the model expects.
-      const results = await Promise.all(calls.map(async (call) => [call, await run(tools, call)] as const));
+      const results = await Promise.all(
+        calls.map(async (call) => {
+          // Same tool, same arguments, again: the answer is already in the
+          // history, so running it once more buys nothing. Say so instead.
+          const key = `${call.name} ${call.arguments}`;
+          const nth = (seen.get(key) ?? 0) + 1;
+          seen.set(key, nth);
+          if (nth > MAX_IDENTICAL_CALLS) {
+            return [
+              call,
+              {
+                ok: false,
+                content:
+                  `Error: blocked identical ${call.name} call #${nth} this turn - the result of the exact same call ` +
+                  "is already in the history. You are in a loop: change the arguments, use a different tool, or " +
+                  "explain what new information you still expect from it.",
+              },
+            ] as const;
+          }
+          return [call, await run(tools, call)] as const;
+        }),
+      );
       for (const [call, result] of results) {
         messages.push({ role: "tool", toolCallId: call.id, content: await spillResult(call.name, result.content) });
       }
