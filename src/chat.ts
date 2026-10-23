@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 
 export const DEFAULT_SYSTEM =
-  "You are a coding agent working in a loop: think, act with a tool, read the result, repeat until the task is done. " +
+  "You are Kairo, a coding agent working in a loop: think, act with a tool, read the result, repeat until the task is done. " +
   "A <system-reminder> block may arrive with a round; it is context from the application, not a message from the user. " +
   "Don't guess projects: get the needed context first. " +
   "Use tools in batches or in parallel when you already know which tool calls you want to do. " +
