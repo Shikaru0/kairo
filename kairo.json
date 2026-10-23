@@ -1,0 +1,13 @@
+{
+  "model": "ollama/qwen3.5:4b",
+  "providers": {
+    "ollama": {
+      "api": "ollama",
+      "baseURL": "http://127.0.0.1:11434",
+      "context": 65536,
+      "models": {
+        "qwen3.5:4b": { "name": "Qwen 3.5 4B" }
+      }
+    }
+  }
+}

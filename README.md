@@ -12,6 +12,39 @@ To run:
 bun run dev
 ```
 
+## Providers
+
+A provider is the host the model runs on: `ollama` speaks Ollama's own `/api/chat`, `openai` speaks any `/chat/completions` host (OpenAI, OpenRouter, vLLM, LM Studio, Groq). Both are described in `kairo.json`, read from `~/.config/kairo/kairo.json` and then `./kairo.json`; a project file overrides the user's per provider and merges their `models` per id. A file that does not parse is reported and skipped.
+
+```json
+{
+  "model": "ollama/qwen3.5:4b",
+  "providers": {
+    "ollama": {
+      "api": "ollama",
+      "baseURL": "http://127.0.0.1:11434",
+      "context": 65536,
+      "models": {
+        "qwen3.5:4b": { "name": "Qwen 3.5 4B" },
+        "llama3.2:3b": {}
+      }
+    },
+    "openrouter": {
+      "baseURL": "https://openrouter.ai/api/v1",
+      "apiKey": "${OPENROUTER_API_KEY}",
+      "models": {
+        "anthropic/claude-sonnet-4": { "name": "Sonnet 4", "context": 200000 },
+        "meta-llama/llama-3.3-70b-instruct": { "temperature": 0.7, "thinking": false }
+      }
+    }
+  }
+}
+```
+
+`api` picks the protocol, `ollama` for a provider named `ollama` and `openai` otherwise. `baseURL` is the host, `apiKey` the bearer token with `${VAR}` read from the environment so a committed file holds no secret, and `context` the window to plan against. A model may set `name` (only a label), its own `context`, `temperature`, and `thinking` (`true`, `false`, `"low"`, `"medium"`, `"high"`; `false` sends no reasoning effort at all).
+
+`/provider` lists providers, `/provider <name> [model]` switches, `/model` lists the configured models and `/model <provider>/<id>` switches both at once. Each provider remembers the model it last ran, so switching back restores it. If the provider named by `KAIRO_PROVIDER` cannot be built, Kairo says why and starts on `ollama`.
+
 ## Plugins
 
 Kairo loads [Agent Plugins](https://agent-plugins.org) 1.0.0 packages at startup, from:

@@ -100,9 +100,13 @@ interface Delta {
   }>;
 }
 
-/** Map the neutral knob onto OpenAI's `reasoning_effort` vocabulary. */
+/**
+ * Map the neutral knob onto OpenAI's `reasoning_effort` vocabulary. `false`
+ * sends nothing at all: hosts that predate reasoning reject the field outright,
+ * so "off" has to mean "absent", not some vendor's spelling of none.
+ */
 function effort(thinking: Thinking | undefined) {
-  if (thinking === false) return "none";
+  if (thinking === false) return undefined;
   if (thinking === true) return "medium";
   return thinking;
 }

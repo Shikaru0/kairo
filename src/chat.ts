@@ -1,4 +1,4 @@
-import type { ChatRequest, Chunk, Message, Provider, ToolCall } from "./provider/provider.ts";
+import type { ChatRequest, Chunk, Message, Provider, Thinking, ToolCall } from "./provider/provider.ts";
 import type { Tool } from "./tools/tool.ts";
 import { compact, freeSpace, trim, type Compact, type Trim } from "./compact.ts";
 import { randomUUID } from "node:crypto";
@@ -284,6 +284,11 @@ export function createChat(
     /** Swap the model future turns run on; the history carries over as-is. */
     setModel(next: string) {
       model = next;
+    },
+    /** Swap sampling for future turns and critic passes; the history carries over. */
+    setOptions({ temperature: nextTemperature, thinking: nextThinking }: { temperature?: number; thinking?: Thinking }) {
+      temperature = nextTemperature ?? temperature;
+      thinking = nextThinking ?? thinking;
     },
   };
 }

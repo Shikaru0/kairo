@@ -1,6 +1,8 @@
 import type { ChatRequest, Chunk, Message, Provider, ToolSpec } from "./provider.ts";
 
 export interface OllamaOptions {
+  /** Name the provider reports; defaults to "ollama". */
+  id?: string;
   /** Context window in tokens. */
   contextSize?: number;
 }
@@ -43,12 +45,12 @@ interface OllamaMessage {
  */
 export function ollama(
   host = "http://127.0.0.1:11434",
-  { contextSize = DEFAULT_CONTEXT_SIZE }: OllamaOptions = {},
+  { id = "ollama", contextSize = DEFAULT_CONTEXT_SIZE }: OllamaOptions = {},
 ): Provider {
   const url = new URL("/api/chat", host).href;
 
   return {
-    id: "ollama",
+    id,
     contextSize,
     async *stream({ model, messages, tools, temperature, thinking }: ChatRequest) {
       const names = toolNames(messages);
