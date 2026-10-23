@@ -8,6 +8,7 @@ import { loadPlugins, mcpInstructions, skillCatalog } from "./plugins/plugin.ts"
 import { ollama } from "./provider/ollama.ts";
 import { createTools } from "./tools/tool.ts";
 import { skillTool } from "./tools/skill.ts";
+import { projectSnapshot } from "./snapshot.ts";
 import type { Message } from "./provider/provider.ts";
 
 const SESSIONS_DIR = ".kairo-sessions";
@@ -39,10 +40,11 @@ if (plugins.skills.length || plugins.tools.length || plugins.prompts.length) {
     `\x1b[2m[plugins: ${plugins.skills.length} skills, ${plugins.tools.length} tools, ${plugins.prompts.length} prompts]\x1b[0m\n`,
   );
 }
-// The user's and project's own AGENTS.md, then each plugin's, then the skill catalog,
-// then any MCP server instructions: standing rules first, followed by what the model
-// can look up and what the servers say.
+// Where the work is, then the user's and project's own AGENTS.md, then each
+// plugin's, then the skill catalog, then any MCP server instructions: facts
+// first, what the model can look up next, and the standing rules last.
 const contributed = [
+  await projectSnapshot(),
   ...plugins.prompts.map((prompt) => prompt.text),
   skillCatalog(plugins.skills),
   mcpInstructions(plugins.instructions),
