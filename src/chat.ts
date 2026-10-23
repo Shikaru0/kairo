@@ -251,7 +251,10 @@ export function createChat(
       model,
       temperature,
       thinking,
-      messages: [{ role: "system", content: CRITIC_SYSTEM }, ...messages],
+      // One system message, the critic's own. The coding prompt sits at index 0
+      // of the history; leaving it in front of this one gives a small model two
+      // sets of instructions, and it tends to keep coding instead of judging.
+      messages: [{ role: "system", content: CRITIC_SYSTEM }, ...messages.filter((message) => message.role !== "system")],
     })) {
       if (chunk.type === "text") verdict += chunk.text;
     }

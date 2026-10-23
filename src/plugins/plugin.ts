@@ -572,6 +572,26 @@ async function validateServer(entry: unknown, root: string, data: string): Promi
   return { error: `unknown transport ${JSON.stringify(config.type)}` };
 }
 
+/**
+ * What a plugin server inherits from the ambient environment: enough to run a
+ * process and find its tools, not the user's tokens and keys. Anything else a
+ * server needs belongs in its own `env` block, where it can be seen and read.
+ */
+const INHERITED_ENV = [
+  "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TMPDIR", "TMP", "TEMP", "TZ",
+  // Windows needs these before it can start a process at all.
+  "SystemRoot", "SystemDrive", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA", "USERPROFILE",
+];
+
+function inheritedEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of INHERITED_ENV) {
+    const value = process.env[name];
+    if (value !== undefined) env[name] = value;
+  }
+  return env;
+}
+
 async function stdioServer(config: Record<string, unknown>, root: string, data: string): Promise<ServerConfig | { error: string }> {
   const unknown = unknownField(config, ["type", "command", "args", "env", "cwd"]);
   if (unknown) return { error: `unknown field "${unknown}"` };
@@ -615,8 +635,9 @@ async function stdioServer(config: Record<string, unknown>, root: string, data: 
     type: "stdio",
     command: executable,
     args: args.map((arg) => expand(arg, root, data)),
-    // Configured values overlay the ambient environment; the reserved two are set last.
-    env: { ...process.env, ...variables, PLUGIN_ROOT: root, PLUGIN_DATA: data } as Record<string, string>,
+    // A small, named slice of the ambient environment plus the plugin's own
+    // block; inheriting everything would hand a third-party server the user's keys.
+    env: { ...inheritedEnv(), ...variables, PLUGIN_ROOT: root, PLUGIN_DATA: data },
     cwd,
   };
 }
