@@ -71,8 +71,12 @@ export function freeSpace(messages: Message[], provider: Provider): number {
 /**
  * Elide the middle of older tool results, newest messages left alone. Returns
  * how many results were elided, or 0 when the window still has room or there is
- * nothing long enough to be worth trimming. Cheap and lossless-ish, so it runs
- * before the summariser rather than instead of it.
+ * nothing long enough to be worth trimming. It runs before the summariser
+ * rather than instead of it: a stale result loses its middle, not the whole
+ * conversation. Rewriting old history also ends the provider's cached prefix at
+ * that message, so the cache stays warm while there is room and is re-read once
+ * when trim fires; that is still far cheaper than the model call compaction
+ * would make.
  */
 export function trim(messages: Message[], provider: Provider): number {
   if (freeSpace(messages, provider) > 1 - TRIM_AT) return 0;

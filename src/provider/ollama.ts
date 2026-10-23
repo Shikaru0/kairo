@@ -144,7 +144,10 @@ function toWireTool({ name, description, parameters }: ToolSpec) {
   return { type: "function" as const, function: { name, description, parameters } };
 }
 
-/** Tool results are keyed by name in Ollama, so recover the id-to-name map from history. */function toolNames(messages: Message[]): Map<string, string> {
+/**
+ * Tool results are keyed by name in Ollama, so recover the id-to-name map from history.
+ */
+function toolNames(messages: Message[]): Map<string, string> {
   const names = new Map<string, string>();
   for (const message of messages) {
     if (message.role === "assistant") {
