@@ -6,6 +6,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 export const DEFAULT_SYSTEM =
   "You are a coding agent working in a loop: think, act with a tool, read the result, repeat until the task is done. " +
+  "A <system-reminder> block may arrive with a round; it is context from the application, not a message from the user. " +
   "Don't guess projects: get the needed context first. " +
   "Use tools in batches or in parallel when you already know which tool calls you want to do. " +
   "Search code with grep and glob, read files with read, and keep bash for commands, builds and tests rather than for making changes. " +
@@ -123,16 +124,18 @@ export function createChat(
         messages.push({ role: "user", content: "Continue the task from these notes." });
       }
 
-      // Refreshed every round: the model's only sense of the clock, of where the
-      // process runs, and of how much window it has left to spend on gathering.
-      messages[0] = { role: "system", content: `${system}\n\n${turnContext(freeSpace(messages, provider))}` };
+      // The prompt itself never changes between rounds, so a provider can reuse
+      // everything before this point from its cache and prefill only what is new.
+      // The volatile part rides as the request's last message: per-request, never
+      // stored, so it cannot pile up or reach a saved session.
+      const request: Message[] = [...messages, { role: "user", content: turnContext(freeSpace(messages, provider)) }];
 
       let reply = "";
       let reasoning = "";
       let finish: string | undefined;
       const calls: ToolCall[] = [];
       try {
-        for await (const chunk of provider.stream({ model, temperature, thinking, tools, messages })) {
+        for await (const chunk of provider.stream({ model, temperature, thinking, tools, messages: request })) {
           if (chunk.type === "text") reply += chunk.text;
           else if (chunk.type == "reasoning") reasoning += chunk.text;
           else if (chunk.type === "toolCall") calls.push(chunk.call);
@@ -305,16 +308,21 @@ async function spillResult(name: string, content: string): Promise<string> {
 }
 
 /**
- * Appended to the system prompt before every round. None of this is knowable
- * to the model otherwise, and one-call-per-round is exactly what a model does
- * when it cannot see the clock or how much window is left.
+ * Sent as a round's last message, never stored. None of this is knowable to the
+ * model otherwise, and one-call-per-round is exactly what a model does when it
+ * cannot see the clock or how much window is left. It rides at the end so the
+ * prompt and the history before it stay byte-identical between rounds, which is
+ * what lets a local provider reuse its cache for them instead of re-reading the
+ * whole conversation. The tags tell the model this is the application talking.
  */
 function turnContext(free: number): string {
   return (
+    "<system-reminder>\n" +
     `[turn context — ${new Date().toISOString().slice(11, 16)} UTC · cwd ${process.cwd()} · ` +
     `${Math.round(free * 100)}% of the window free] ` +
     "Batch the independent tool calls you already know you need into one response; " +
-    "when the window runs low, stop gathering and answer from what you have."
+    "when the window runs low, stop gathering and answer from what you have.\n" +
+    "</system-reminder>"
   );
 }
 
