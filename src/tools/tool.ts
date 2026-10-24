@@ -1,6 +1,7 @@
 import type { ToolSpec } from "../provider/provider.ts";
 import { readTool } from "./read.ts";
 import { grepTool } from "./grep.ts";
+import { globTool } from "./glob.ts";
 import { writeTool } from "./write.ts";
 import { editTool } from "./edit.ts";
 import { bashTool } from "./bash.ts";
@@ -29,7 +30,7 @@ const MAX_SPAWN_DEPTH = 2;
  * looks for a builtin first.
  */
 export function createTools(agent: Agent, extra: Tool[] = [], depth = MAX_SPAWN_DEPTH): Tool[] {
-  const tools: Tool[] = [todoTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
+  const tools: Tool[] = [todoTool, globTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
   if (depth <= 0) return tools;
   // `bg` closes over the finished list, so it backgrounds exactly the calls its own agent has.
   const all: Tool[] = [
