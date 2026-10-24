@@ -1,6 +1,8 @@
 # kairo
 
 [![CI](https://github.com/Shikaru0/kairo/actions/workflows/ci.yml/badge.svg)](https://github.com/Shikaru0/kairo/actions/workflows/ci.yml)
+[![Publish to GitHub Packages](https://github.com/Shikaru0/kairo/actions/workflows/npm-publish-github-packages.yml/badge.svg)](https://github.com/Shikaru0/kairo/actions/workflows/npm-publish-github-packages.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Shikaru0/kairo)](https://github.com/Shikaru0/kairo/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Packages](https://img.shields.io/github/package-json/v/Shikaru0/kairo?label=packages)](https://github.com/Shikaru0/kairo/pkgs/npm/kairo)
 
