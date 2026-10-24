@@ -1,6 +1,6 @@
 {
   "name": "@shikaru0/kairo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Terminal coding agent built on Bun with Ollama/OpenAI-compatible providers, plugins, subagents, missions, and custom commands.",
   "license": "MIT",
   "bin": {
