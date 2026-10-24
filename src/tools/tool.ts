@@ -17,8 +17,8 @@ export interface Tool extends ToolSpec {
   execute(args: Record<string, unknown>): Promise<string> | string;
 }
 
-/** Spawn levels: the top agent, one subagent below it, and one more below that. */
-const MAX_SPAWN_DEPTH = 2;
+/** Depth of subagents */
+const MAX_SPAWN_DEPTH = 6;
 
 /**
  * The tools one agent runs with. Order is not decoration: a small model reaches
@@ -30,14 +30,19 @@ const MAX_SPAWN_DEPTH = 2;
  * looks for a builtin first.
  */
 export function createTools(agent: Agent, extra: Tool[] = [], depth = MAX_SPAWN_DEPTH): Tool[] {
-  const tools: Tool[] = [todoTool, globTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
-  if (depth <= 0) return tools;
+  const baseTools: Tool[] = [todoTool, globTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
+  if (depth <= 0) return baseTools;
   // `bg` closes over the finished list, so it backgrounds exactly the calls its own agent has.
   const all: Tool[] = [
     todoTool,
-    taskTool(agent, (model) => createTools({ ...agent, model }, extra, depth - 1)),
+    taskTool(agent, (model, allowedTools?: string[]) => {
+      const spawned = createTools({ ...agent, model }, extra, depth - 1);
+      if (!allowedTools?.length) return spawned;
+      const allowed = new Set(allowedTools);
+      return spawned.filter(t => allowed.has(t.name) || t.name === "task" || t.name === "bg");
+    }),
     bgTool(() => all),
-    ...tools.slice(1),
+    ...baseTools.slice(1),
   ];
   return all;
 }

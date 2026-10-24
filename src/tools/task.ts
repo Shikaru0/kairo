@@ -1,6 +1,7 @@
 import { createChat } from "../chat.ts";
 import type { ChatRequest, Provider } from "../provider/provider.ts";
 import type { Tool } from "./tool.ts";
+import type { SubagentDef } from "../agents/agent.ts";
 
 const SUBAGENT_SYSTEM =
   "You are a subagent with exactly one task, and nothing can answer a question back: " +
@@ -15,6 +16,7 @@ const SUBAGENT_SYSTEM =
 /** What a subagent runs on: the parent's provider and defaults, overridable per spawn. */
 export interface Agent extends Omit<ChatRequest, "messages" | "tools"> {
   provider: Provider;
+  subagents?: SubagentDef[];
 }
 
 /** One background subagent: the answer lands here whenever the run finishes. */
@@ -36,17 +38,28 @@ interface Run {
  * and, at depth zero, no `task` at all. The `model` lets the caller hand easy
  * work to a smaller model; it then sticks as the default for that subtree.
  */
-export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
+export function taskTool(agent: Agent, spawn: (model: string, allowedTools?: string[]) => Tool[]): Tool {
   const runs = new Map<number, Run>();
   let nextRun = 0;
+  const subagents = agent.subagents ?? [];
 
-  async function start(task: string, model: string): Promise<string> {
+  function getToolsFor(def?: SubagentDef, model?: string) {
+    const all = spawn(model ?? agent.model, def?.tools);
+    if (!def?.tools?.length) return all;
+    return all.filter(t => def.tools!.includes(t.name) || t.name === "task" || t.name === "bg");
+  }
+
+  async function start(task: string, model: string, subagent?: SubagentDef): Promise<string> {
+    const system = subagent?.system ?? SUBAGENT_SYSTEM;
+    const chosenModel = subagent?.model ?? model;
+    const temp = subagent?.temperature ?? agent.temperature;
+    const think = subagent?.thinking ?? agent.thinking;
     const child = createChat(agent.provider, {
-      model,
-      temperature: agent.temperature,
-      thinking: agent.thinking,
-      system: SUBAGENT_SYSTEM,
-      tools: spawn(model),
+      model: chosenModel,
+      temperature: temp,
+      thinking: think,
+      system,
+      tools: getToolsFor(subagent, chosenModel),
       // The caller judges the summary, so the subagent skips its own critic pass.
       verify: false,
     });
@@ -61,6 +74,10 @@ export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
     return answer.trim() || "(subagent returned nothing)";
   }
 
+  const agentList = subagents.length
+    ? subagents.map(a => `- ${a.name}: ${a.description}`).join("\n")
+    : "- general-purpose, explore, plan (built-ins)";
+
   return {
     name: "task",
     description:
@@ -68,11 +85,9 @@ export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
       "immediately, so it works while you take your own steps. " +
       "Use when: a step is bulky and self-contained - scanning many files, repetitive changes, independent " +
       "research - and your own steps must keep moving meanwhile; quick steps, do them yourself. " +
-      "Call again with { id } to collect the " +
-      "answer. `model` runs it on a different pulled model — bash `ollama list` shows what is pulled — " +
-      "so easy work can go to a fast small model and hard work to a bigger one. Nesting: a subagent " +
-      "gets this same tool one level shallower, and at the bottom it is simply absent, so depth is " +
-      "enforced by the tool list, not by trust.",
+      "Call again with { id } to collect the answer. " +
+      "`subagent` selects a specialized agent type. Available: \n" + agentList + "\n" +
+      "`model` runs it on a different pulled model. Nesting: a subagent gets this same tool one level shallower, and at the bottom it is simply absent.",
     parameters: {
       type: "object",
       properties: {
@@ -88,9 +103,13 @@ export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
           type: "string",
           description: "Run this subagent on another pulled model. Defaults to the one you run on.",
         },
+        subagent: {
+          type: "string",
+          description: "Subagent type/name (e.g., explore, plan, general-purpose).",
+        },
       },
     },
-    execute: async ({ task, id, model }) => {
+    execute: async ({ task, id, model, subagent: subagentName }) => {
       if (id !== undefined && id !== null) {
         const run = runs.get(Number(id));
         if (!run) return `Error: no subagent #${String(id)}`;
@@ -103,13 +122,17 @@ export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
       const text = String(task ?? "").trim();
       if (!text) return "Error: pass `task` to start a subagent, or `id` to collect one.";
       const chosen = String(model ?? agent.model);
+      const def = subagentName ? subagents.find(a => a.name === subagentName) : undefined;
+      if (subagentName && !def) {
+        return `Error: unknown subagent "${subagentName}". Available: ${subagents.map(a => a.name).join(", ")}`;
+      }
 
       const run: Run = { answer: "", failed: false, ready: Promise.resolve() };
       const runId = nextRun++;
       runs.set(runId, run);
       // .catch keeps a failure in the stored answer: nothing else may await this
       // before the model collects, and an unobserved rejection would crash Bun.
-      run.ready = start(text, chosen)
+      run.ready = start(text, chosen, def)
         .then((answer) => {
           run.answer = answer;
         })
@@ -118,7 +141,7 @@ export function taskTool(agent: Agent, spawn: (model: string) => Tool[]): Tool {
           run.answer = error instanceof Error ? error.message : String(error);
         });
 
-      return `subagent #${runId} started on ${chosen}. Work on your own steps, then call task with {"id": ${runId}} to collect its answer.`;
+      return `subagent #${runId} started (${def?.name ?? "general-purpose"}) on ${def?.model ?? chosen}. Work on your own steps, then call task with {"id": ${runId}} to collect its answer.`;
     },
   };
 }

@@ -58,3 +58,26 @@ A package is a directory with a `plugin.json`. Its `skills/<name>/SKILL.md` file
 Outside any package, Kairo reads `~/.config/kairo/AGENTS.md` and `./AGENTS.md` the same way — the standing-instructions file Claude Code, Codex and OpenCode share. Both are optional; the user's text comes first, then the project's, then the plugins'. Each is capped at 32 KB (a prompt is re-sent every round) and an unreadable or oversized one is reported and ignored. Only the working directory is checked, not its parents.
 
 Loose skills — skills not inside a package — are picked up from the same directories OpenCode and Claude Code read, project first: `.kairo/skill`, `.kairo/skills`, `.agents/skills`, `.claude/skills`, then the user-level `~/.config/kairo/{skill,skills}`, `~/.agents/skills` and `~/.claude/skills`. A name collision keeps the first found and reports the shadowed one.
+
+## Agents
+
+Kairo supports specialized subagents via the `task` tool. Built-in agents: `general-purpose`, `explore`, `plan`. Custom agents can be defined as `.md` (frontmatter) or `.json` files in:
+
+1. `./.kairo/agents/` - project agents
+2. `./agents/`
+3. `~/.config/kairo/agents/`
+4. `~/.config/opencode/agents/`
+5. `~/.claude/agents/`
+
+Example (`.kairo/agents/debugger.md`):
+```markdown
+---
+name: debugger
+description: Debugging specialist for errors and test failures
+tools: glob,grep,read,bash
+model: ollama/qwen3.5:4b
+---
+You are an expert debugger. Find root cause, apply minimal fixes, verify with tests.
+```
+
+Call with `task` using `subagent: "debugger"`. Agents can restrict tools, set custom system prompts, models, temperature, and thinking.

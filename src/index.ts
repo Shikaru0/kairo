@@ -13,6 +13,7 @@ import { createTools } from "./tools/tool.ts";
 import { skillTool } from "./tools/skill.ts";
 import { projectSnapshot } from "./snapshot.ts";
 import type { Message } from "./provider/provider.ts";
+import { loadSubagents } from "./agents/agent.ts";
 
 const SESSIONS_DIR = ".kairo-sessions";
 const DEFAULT_SESSION = "default";
@@ -126,6 +127,7 @@ if (plugins.skills.length || plugins.tools.length || plugins.prompts.length) {
     `\x1b[2m[plugins: ${plugins.skills.length} skills, ${plugins.tools.length} tools, ${plugins.prompts.length} prompts]\x1b[0m\n`,
   );
 }
+const subagents = await loadSubagents();
 // Where the work is, then the user's and project's own AGENTS.md, then each
 // plugin's, then the skill catalog, then any MCP server instructions: facts
 // first, what the model can look up next, and the standing rules last.
@@ -143,6 +145,7 @@ const chat = createChat(provider, {
   tools: createTools(
     {
       provider,
+      subagents,
       get model() {
         return model;
       },
