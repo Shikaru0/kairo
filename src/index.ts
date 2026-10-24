@@ -390,7 +390,12 @@ for await (const line of rl) {
         else if (chunk.type === "toolCall") process.stdout.write(`\x1b[2m[tool] ${chunk.call.name}(${chunk.call.arguments})\x1b[0m\n\n`);
         else if (chunk.type === "finish" && chunk.reason === "length") process.stdout.write("\x1b[2m[cut off: hit the model's context/token limit]\x1b[0m\n\n");
         else if (chunk.type === "stop" && chunk.reason === "stuck") {
-          process.stdout.write("\x1b[2m[stopped: tool calls kept failing]\x1b[0m\n\n");
+          if (chunk.failures?.length) {
+            const lines = chunk.failures.slice(-8).map((f) => `  - ${f.call}: ${f.error}`).join("\n");
+            process.stdout.write(`\x1b[2m[stopped: tool calls kept failing]\n${lines}\x1b[0m\n\n`);
+          } else {
+            process.stdout.write("\x1b[2m[stopped: model kept replying with nothing]\x1b[0m\n\n");
+          }
         } else if (chunk.type === "compact") {
           process.stdout.write(`\x1b[2m[context compacted: ${chunk.removed} messages -> summary]\x1b[0m\n\n`);
         } else if (chunk.type === "trim") {

@@ -67,6 +67,7 @@ export type StopReason = "answered" | "stuck";
 export interface Stop {
   type: "stop";
   reason: StopReason;
+  failures?: Array<{ call: string; error: string }>;
 }
 
 /** Chat-level chunk: the verdict of the critic pass, and whether it asked for a fix. */
@@ -103,6 +104,7 @@ export function createChat(
   async function* turn(): AsyncIterable<Chunk | Stop | Check | Compact | Trim> {
     let strikes = 0;
     let usedTools = false;
+    const recentFailures: Array<{ call: string; error: string }> = [];
     let checked = false;
     let retriedFull = false;
     /** Identical calls seen this turn, with the verdict `run`-or-block for each. */
@@ -236,9 +238,18 @@ export function createChat(
       }
       usedTools = true;
 
-      strikes = results.some(([, result]) => result.ok) ? 0 : strikes + 1;
+      const failed = results.filter(([, result]) => !result.ok);
+      if (results.some(([, result]) => result.ok)) {
+        strikes = 0;
+        recentFailures.length = 0;
+      } else {
+        strikes++;
+        for (const [call, result] of failed) {
+          recentFailures.push({call: `${call.name}(${call.arguments})`, error: (result.content.split("\n")[0] ?? "").slice(0, 300)});
+        }
+      }
       if (strikes > MAX_TOOL_STRIKES) {
-        yield { type: "stop", reason: "stuck" };
+        yield { type: "stop", reason: "stuck", failures: recentFailures };
         return;
       }
     }
