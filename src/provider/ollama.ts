@@ -82,7 +82,7 @@ export function ollama(
           buffer = buffer.slice(newline + 1);
           if (!line) continue;
 
-          const part = JSON.parse(line) as OllamaChunk;
+          const part = JSON.parse(line) as OllamaChunk & { prompt_eval_count?: number; eval_count?: number };
           if (part.error) throw new Error(`ollama: ${part.error}`);
           const message = part.message ?? {};
           if (message.thinking) yield { type: "reasoning", text: message.thinking };
@@ -101,7 +101,17 @@ export function ollama(
               },
             };
           }
-          if (part.done) finish = part.done_reason ?? "stop";
+          if (part.done) {
+            finish = part.done_reason ?? "stop";
+            if (part.prompt_eval_count !== undefined || part.eval_count !== undefined) {
+              yield {
+                type: "usage",
+                promptTokens: part.prompt_eval_count,
+                completionTokens: part.eval_count,
+                totalTokens: (part.prompt_eval_count ?? 0) + (part.eval_count ?? 0),
+              };
+            }
+          }
         }
       }
 

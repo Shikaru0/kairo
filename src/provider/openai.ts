@@ -48,6 +48,16 @@ export function openaiCompatible({ id, baseURL, apiKey }: OpenAICompatibleOption
           call.arguments += partial.function?.arguments ?? "";
           calls.set(partial.index, call);
         }
+
+        const usage = (chunk as any).usage;
+        if (usage) {
+          yield {
+            type: "usage",
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens,
+          };
+        }
       }
       for (const call of calls.values()) yield { type: "toolCall", call };
       if (finish) yield { type: "finish", reason: finish };

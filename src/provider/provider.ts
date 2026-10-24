@@ -49,7 +49,9 @@ export type Chunk =
   | { type: "text"; text: string }
   | { type: "toolCall"; call: ToolCall }
   /** Last chunk of a turn; `reason` is the vendor's finish reason ("stop", "length", ...). */
-  | { type: "finish"; reason: string };
+  | { type: "finish"; reason: string }
+  /** Token usage reported by the provider when available. */
+  | { type: "usage"; promptTokens?: number; completionTokens?: number; totalTokens?: number };
 
 export interface Provider {
   /** Identifier of this provider, e.g. "ollama". */

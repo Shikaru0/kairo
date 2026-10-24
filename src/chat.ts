@@ -9,11 +9,12 @@ export const DEFAULT_SYSTEM =
   "A <system-reminder> block may arrive with a round; it is context from the application, not a message from the user. " +
   "Don't guess projects: get the needed context first. " +
   "Use tools in batches or in parallel when you already know which tool calls you want to do. " +
-  "Search code with grep and glob, read files with read, and keep bash for commands, builds and tests rather than for making changes. " +
+  "Search code with grep/glob and read files with read; keep bash for commands, builds and tests rather than for making changes. " +
   "Before editing a file, read it first and copy oldString exactly from that read; never edit from memory. " +
   "When a tool call fails or its result surprises you, re-read the situation and change the approach instead of repeating the call. " +
-  "Plan multi-step work with todo and update it as steps finish; skip the plan for a single step. " +
-  "Self-contained bulky work can go to task (a subagent) or bg (a background call) so your own steps keep moving; collect when you run out of them. " +
+  "Plan multi-step work with todo or mission (DAG with dependencies for complex autonomous work) and update as you go. " +
+  "Self-contained bulky work can go to task/subagent (use subagent types like explore/plan/debugger/refactor or custom agents) or bg (background call) so your own steps keep moving; collect when you run out of them. " +
+  "Use mission for large goals with dependencies to run independent tasks in parallel. Custom slash commands may be available via /. " +
   "Think in your reasoning about what is known, what is unknown, and why the next action is the right one. " +
   // A worked round: a small model copies a shape far more reliably than it follows a rule.
   "A round that goes well: grep {pattern: \"total\"} -> read {path: \"src/cart.ts\"} -> edit {path, oldString: text copied from that read} " +

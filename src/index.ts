@@ -222,6 +222,7 @@ rl.on("close", () => {
 rl.setPrompt("> ");
 rl.prompt();
 let exited = false;
+const sessionUsage = { prompt: 0, completion: 0, total: 0 };
 for await (const line of rl) {
   const input = line.trim();
   if (input === "/exit" || input === "exit") {
@@ -462,8 +463,18 @@ for await (const line of rl) {
       }
     }
   }
+  if (input === "/usage" || input === "/stats") {
+    process.stdout.write(`\x1b[2m[session usage] prompt: ${sessionUsage.prompt} · completion: ${sessionUsage.completion} · total: ${sessionUsage.total}\x1b[0m\n\n`);
+    if (!closed) rl.prompt();
+    continue;
+  }
+  if (input === "/usage" || input === "/stats") {
+    process.stdout.write(`\x1b[2m[session usage] prompt: ${sessionUsage.prompt} · completion: ${sessionUsage.completion} · total: ${sessionUsage.total}\x1b[0m\n\n`);
+    if (!closed) rl.prompt();
+    continue;
+  }
   if (input === "/help") {
-    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /provider [name] [model] /compact /plugins /commands /agents /ls /exit\n\n");
+    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /provider [name] [model] /compact /plugins /commands /agents /usage /ls /exit\n\n");
     if (!closed) rl.prompt();
     continue;
   }
@@ -481,6 +492,13 @@ for await (const line of rl) {
     let inThinking = false;
     try {
       for await (const chunk of chat.send(input)) {
+        if ((chunk as any).type === "usage") {
+          const u: any = chunk;
+          if (typeof u.promptTokens === "number") sessionUsage.prompt += u.promptTokens;
+          if (typeof u.completionTokens === "number") sessionUsage.completion += u.completionTokens;
+          if (typeof u.totalTokens === "number") sessionUsage.total += u.totalTokens;
+          continue;
+        }
         if (chunk.type === "reasoning") {
           if (!inThinking) {
             inThinking = true;
