@@ -1,20 +1,71 @@
 # kairo
 
-To install dependencies:
+[![CI](https://github.com/Shikaru0/kairo/actions/workflows/ci.yml/badge.svg)](https://github.com/Shikaru0/kairo/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A minimal terminal coding agent built on [Bun](https://bun.sh). Kairo runs locally with [Ollama](https://ollama.com) or any OpenAI-compatible host, keeps its context lean with automatic compaction, self-reviews its work, and extends itself with plugins, MCP servers, subagents, missions, and custom commands.
+
+## Features
+
+- **Local-first** — Native Ollama support with thinking; works with OpenAI, OpenRouter, vLLM, LM Studio, Groq, and any `/chat/completions` host
+- **Configurable providers & models** — Define everything in `kairo.json` with per-provider and per-model settings
+- **Self-reviewing** — A critic pass checks completed tool-assisted turns before returning them
+- **Smart context management** — Tool output spilling, trimming, and deep compaction keep long sessions running
+- **Built-in tools** — `read`, `write`, `edit`, `grep`, `glob`, `bash`, `todo`, `task`, `bg`, `websearch`, `webfetch`, and plugin/MCP tools
+- **Subagents** — Built-in `general-purpose`, `explore`, `plan`, or define your own with tool restrictions and custom models
+- **Autonomous missions** — DAG-based task decomposition that runs independent work in parallel
+- **Custom commands** — Define slash commands as TypeScript or Markdown prompt templates
+- **Plugin system** — [Agent Plugins](https://agent-plugins.org) 1.0.0 support with skills, MCP (`stdio`/`streamable-http`), and AGENTS.md
+- **AGENTS.md aware** — Reads `./AGENTS.md` and `~/.config/kairo/AGENTS.md` (Claude Code, Codex, OpenCode compatible)
+
+## Requirements
+
+- [Bun](https://bun.sh) >= 1.2
+- [Ollama](https://ollama.com) running locally (default) or an API key for a hosted OpenAI-compatible provider
+
+## Quickstart
 
 ```bash
+# Install dependencies
 bun install
-```
 
-To run:
+# Pull a model with Ollama
+ollama pull qwen3.5:4b
 
-```bash
+# Start Kairo
 bun run dev
 ```
 
-## Providers
+Kairo starts in the current directory with session `default`. Use `bun run dev <session>` for named sessions.
 
-A provider is the host the model runs on: `ollama` speaks Ollama's own `/api/chat`, `openai` speaks any `/chat/completions` host (OpenAI, OpenRouter, vLLM, LM Studio, Groq). Both are described in `kairo.json`, read from `~/.config/kairo/kairo.json` and then `./kairo.json`; a project file overrides the user's per provider and merges their `models` per id. A file that does not parse is reported and skipped.
+## Slash commands
+
+| Command | Description |
+| --- | --- |
+| `/help` | Show available commands |
+| `/new` | Start a fresh session |
+| `/clear` | Clear conversation history |
+| `/history` | Show conversation history |
+| `/use <id>` | Load a saved session |
+| `/save <id>` | Save session to a named ID |
+| `/model` or `/model <provider>/<model>` | List models or switch model/provider |
+| `/provider` or `/provider <name> [model]` | List providers or switch provider |
+| `/agents` | List available subagents |
+| `/commands` | List custom slash commands |
+| `/plugins` | List loaded plugins, skills, tools, and MCP instructions |
+| `/ls` | List files in the current directory |
+| `/compact` | Force conversation compaction |
+| `/usage` or `/stats` | Show token usage for the session |
+| `/exit` | Exit Kairo |
+
+## Providers & Configuration
+
+Kairo is configured with `kairo.json`. It loads from:
+
+1. `~/.config/kairo/kairo.json` (user)
+2. `./kairo.json` (project) — overrides and deep-merges with the user config
+
+A default `kairo.json` is included in the repo. Invalid files are reported and skipped without crashing.
 
 ```json
 {
@@ -41,86 +92,169 @@ A provider is the host the model runs on: `ollama` speaks Ollama's own `/api/cha
 }
 ```
 
-`api` picks the protocol, `ollama` for a provider named `ollama` and `openai` otherwise. `baseURL` is the host, `apiKey` the bearer token with `${VAR}` read from the environment so a committed file holds no secret, and `context` the window to plan against. A model may set `name` (only a label), its own `context`, `temperature`, and `thinking` (`true`, `false`, `"low"`, `"medium"`, `"high"`; `false` sends no reasoning effort at all).
+- **api**: `ollama` for Ollama's native API, or `openai` for any `/chat/completions` host (defaults to `ollama` for provider named `ollama`, otherwise `openai`)
+- **baseURL**: Host endpoint
+- **apiKey**: Bearer token. Use `${VAR}` to read from environment variables (keeps secrets out of committed files)
+- **context**: Context window in tokens. Ollama bakes this into each request via `num_ctx`
+- **models**: Per-model overrides for `name`, `context`, `temperature`, and `thinking` (`true`, `false`, `"low"`, `"medium"`, `"high"`)
 
-`/provider` lists providers, `/provider <name> [model]` switches, `/model` lists the configured models and `/model <provider>/<id>` switches both at once. Each provider remembers the model it last ran, so switching back restores it. If the provider named by `KAIRO_PROVIDER` cannot be built, Kairo says why and starts on `ollama`.
+### Environment variables
 
-## Plugins
+| Variable | Default | Description |
+| --- | --- | --- |
+| `KAIRO_CONFIG` | — | Path to a specific config file (overrides default locations) |
+| `KAIRO_PROVIDER` | `ollama` | Provider to use at startup |
+| `KAIRO_MODEL` | `qwen3.5:4b` | Model at startup, or `provider/model` to switch providers |
+| `KAIRO_CONTEXT` | config value | Context window in tokens, overrides config |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama endpoint |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
+| `OPENAI_API_KEY` | — | API key (local hosts often don't need one) |
+| `KAIRO_PLUGINS` | — | Extra plugin directories, colon-separated |
+| `KAIRO_SEARCH` | `exa` | Set to `ddg` to force DuckDuckGo |
+| `EXA_API_KEY` | — | Raises Exa search rate limits |
+| `XDG_CONFIG_HOME` | `~/.config` | Config directory location |
+| `XDG_DATA_HOME` | `~/.local/share` | Data directory location |
 
-Kairo loads [Agent Plugins](https://agent-plugins.org) 1.0.0 packages at startup, from:
+## Built-in tools
 
-1. `./.kairo/plugins/<plugin>/` - project plugins, which shadow a user plugin of the same name
-2. `~/.config/kairo/plugins/<plugin>/`
-3. every directory in `KAIRO_PLUGINS` (colon-separated)
+| Tool | Description |
+| --- | --- |
+| `read` | Read file contents (line-numbered) |
+| `write` | Write/create files |
+| `edit` | Edit files with exact string replacement |
+| `grep` | Search file contents with regex |
+| `glob` | Find files by glob pattern |
+| `bash` | Run shell commands |
+| `todo` | Track and manage tasks |
+| `task` | Spawn a subagent for a focused task |
+| `bg` | Run commands in the background |
+| `websearch` | Search the web (Exa or DuckDuckGo) |
+| `webfetch` | Fetch and read web pages |
+| `skill` | Load a plugin skill on demand |
 
-A package is a directory with a `plugin.json`. Its `skills/<name>/SKILL.md` files are catalogued in the system prompt and loaded on demand through the `skill` tool, and the servers in its `mcp.json` (`stdio` and `streamable-http`) become `server_tool` tools, named the way OpenCode names MCP tools. A server's handshake `instructions` go into the system prompt as well, and so does the package's own `AGENTS.md`, if it has one: standing instructions that belong in every session. A broken package, skill or server is reported and skipped rather than failing the session; `/plugins` lists what loaded and everything that was skipped. Notes are also printed at startup.
+## Subagents
 
-Outside any package, Kairo reads `~/.config/kairo/AGENTS.md` and `./AGENTS.md` the same way — the standing-instructions file Claude Code, Codex and OpenCode share. Both are optional; the user's text comes first, then the project's, then the plugins'. Each is capped at 32 KB (a prompt is re-sent every round) and an unreadable or oversized one is reported and ignored. Only the working directory is checked, not its parents.
+Kairo ships with three built-in subagents and supports custom ones.
 
-Loose skills — skills not inside a package — are picked up from the same directories OpenCode and Claude Code read, project first: `.kairo/skill`, `.kairo/skills`, `.agents/skills`, `.claude/skills`, then the user-level `~/.config/kairo/{skill,skills}`, `~/.agents/skills` and `~/.claude/skills`. A name collision keeps the first found and reports the shadowed one.
+**Built-in:**
+- `general-purpose` — Full tool access for complex multi-step work
+- `explore` — Read-only exploration with `glob`, `grep`, `read`, web tools
+- `plan` — Research and create implementation plans without making changes
 
-## Agents
+**Custom agents** can be defined as `.md` (with frontmatter) or `.json` files in:
 
-Kairo supports specialized subagents via the `task` tool. Built-in agents: `general-purpose`, `explore`, `plan`. Custom agents can be defined as `.md` (frontmatter) or `.json` files in:
-
-1. `./.kairo/agents/` - project agents
+1. `./.kairo/agents/` (project, highest priority)
 2. `./agents/`
 3. `~/.config/kairo/agents/`
 4. `~/.config/opencode/agents/`
 5. `~/.claude/agents/`
 
-Example (`.kairo/agents/debugger.md`):
 ```markdown
 ---
 name: debugger
 description: Debugging specialist for errors and test failures
 tools: glob,grep,read,bash
 model: ollama/qwen3.5:4b
+temperature: 0.3
+thinking: medium
 ---
 You are an expert debugger. Find root cause, apply minimal fixes, verify with tests.
 ```
 
-Call with `task` using `subagent: "debugger"`. Agents can restrict tools, set custom system prompts, models, temperature, and thinking.
+Call subagents via the `task` tool with `subagent: "debugger"`, or let the agent choose automatically.
 
-## Missions (autonomous task decomposition)
+## Missions (autonomous task DAGs)
 
-Kairo has a `mission` tool for breaking large goals into a DAG of tasks with dependencies. Independent tasks run in parallel via subagents.
+The `mission` tool breaks large goals into a DAG of dependent tasks and runs them in parallel when possible.
 
-Actions: `create`, `run`, `status`, `list`, `clear`.
+**Actions:** `create`, `run`, `status`, `list`, `clear`
 
-Example flow:
-1. `mission {action:"create", goal:"Refactor auth module", tasks:[{id:"explore", title:"Explore auth", description:"...", subagent:"explore"}, {id:"plan", title:"Plan changes", description:"...", deps:["explore"], subagent:"plan"}, {id:"impl", title:"Implement", description:"...", deps:["plan"]}]}` 
-2. `mission {action:"run", missionId:"m0"}`
-3. `mission {action:"status", missionId:"m0"}`
+```json
+{
+  "action": "create",
+  "goal": "Refactor auth module",
+  "tasks": [
+    { "id": "explore", "title": "Explore auth", "description": "...", "subagent": "explore" },
+    { "id": "plan", "title": "Plan changes", "description": "...", "deps": ["explore"], "subagent": "plan" },
+    { "id": "impl", "title": "Implement", "description": "...", "deps": ["plan"] }
+  ]
+}
+```
+
+```json
+{ "action": "run", "missionId": "m0" }
+{ "action": "status", "missionId": "m0" }
+```
+
+Tasks with satisfied dependencies run concurrently via subagents. Progress and results are tracked in the mission status.
 
 ## Custom slash commands
 
-Define custom commands as `.ts`/`.js` files with `run(ctx)` or as `.md` prompt templates in:
-- `./.kairo/commands/`
-- `./commands/`
-- `~/.config/kairo/commands/`
-- `~/.config/opencode/commands/`
-- `~/.claude/commands/`
+Define your own commands that expand to prompts or run custom TypeScript logic.
 
-**TypeScript command example** (`.kairo/commands/hello.ts`):
+**Locations (first match wins):**
+1. `./.kairo/commands/`
+2. `./commands/`
+3. `~/.config/kairo/commands/`
+4. `~/.config/opencode/commands/`
+5. `~/.claude/commands/`
+
+**Markdown prompt template** (`.kairo/commands/review.md`):
+```markdown
+---
+name: review
+description: Review code for bugs and improvements
+---
+Review $ARGUMENTS for bugs, security issues, and suggest concrete improvements.
+```
+
+Use with `/review src/auth.ts`. Use `$ARGUMENTS`, `$1`, `$2`... for positional args.
+
+**TypeScript command** (`.kairo/commands/deploy.ts`):
 ```ts
 export default {
-  name: "hello",
-  description: "Say hello",
+  name: "deploy",
+  description: "Deploy the project",
   run: async (ctx) => {
-    ctx.print("Hello! Args: " + ctx.rawArgs);
-    // ctx.chat, ctx.save(), ctx.args available
+    ctx.print("Deploying...");
+    await ctx.chat.send("Run the deployment steps");
   },
 };
 ```
 
-**Markdown prompt command**:
-```markdown
----
-name: review
-description: Review code
----
-Review $ARGUMENTS for bugs and suggest improvements.
+## Plugins
+
+Kairo loads [Agent Plugins](https://agent-plugins.org) 1.0.0 packages from:
+
+1. `./.kairo/plugins/<plugin>/` — project plugins (shadow user plugins with the same name)
+2. `~/.config/kairo/plugins/<plugin>/` — user plugins
+3. Directories in `KAIRO_PLUGINS` (colon-separated)
+
+A plugin directory contains `plugin.json`, optional `skills/<name>/SKILL.md`, optional `mcp.json`, and optional `AGENTS.md`. Skills appear in the catalog and load on demand via the `skill` tool. MCP servers (`stdio`, `streamable-http`) become tools named `server_tool`. Server instructions and plugin AGENTS.md are injected into the system prompt. Broken plugins are skipped with notes; use `/plugins` to inspect what's loaded.
+
+## Project context & AGENTS.md
+
+Kairo reads `~/.config/kairo/AGENTS.md` and `./AGENTS.md` (same format as Claude Code, Codex, and OpenCode). The user's file comes first, the project's second. Each is capped at 32 KB. Plugin AGENTS.md files are also included in the prompt. Loose skills are discovered from `.kairo/skill(s)`, `.agents/skills`, `.claude/skills`, and their user-level equivalents.
+
+At startup, Kairo captures a snapshot of the project (directory tree, git branch/status, package scripts) and includes it in context.
+
+## Sessions
+
+Conversations are auto-saved to `.kairo-sessions/`. Use `/save <id>` and `/use <id>` to manage sessions, or start a named session with `bun run dev <id>`. Sessions are gitignored by default.
+
+## Development
+
+```bash
+# Run in dev mode
+bun run dev
+
+# Type check
+bunx tsc --noEmit
+
+# Run tests
+bun test
 ```
 
-Use with `/review src/auth.ts`. List with `/commands`.
+## License
+
+[MIT](LICENSE)
