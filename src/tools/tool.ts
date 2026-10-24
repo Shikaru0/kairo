@@ -10,6 +10,7 @@ import { taskTool, type Agent } from "./task.ts";
 import { bgTool } from "./bg.ts";
 import { webFetchTool } from "./web/webfetch.ts";
 import { webSearchTool } from "./web/websearch.ts";
+import { missionTool } from "./mission.ts";
 
 /** A capability the app can run when the model asks for it. */
 export interface Tool extends ToolSpec {
@@ -30,19 +31,30 @@ const MAX_SPAWN_DEPTH = 6;
  * looks for a builtin first.
  */
 export function createTools(agent: Agent, extra: Tool[] = [], depth = MAX_SPAWN_DEPTH): Tool[] {
-  const baseTools: Tool[] = [todoTool, globTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
+  const baseTools: Tool[] = [todoTool, missionTool(agent, (model, allowedTools?: string[]) => {
+    const spawned = createTools({ ...agent, model }, extra, depth - 1);
+    if (!allowedTools?.length) return spawned;
+    const allowed = new Set(allowedTools);
+    return spawned.filter((t) => allowed.has(t.name) || t.name === "task" || t.name === "bg" || t.name === "mission");
+  }), globTool, grepTool, readTool, webSearchTool, webFetchTool, writeTool, editTool, bashTool, ...extra];
   if (depth <= 0) return baseTools;
   // `bg` closes over the finished list, so it backgrounds exactly the calls its own agent has.
   const all: Tool[] = [
     todoTool,
+    missionTool(agent, (model, allowedTools?: string[]) => {
+      const spawned = createTools({ ...agent, model }, extra, depth - 1);
+      if (!allowedTools?.length) return spawned;
+      const allowed = new Set(allowedTools);
+      return spawned.filter((t) => allowed.has(t.name) || t.name === "task" || t.name === "bg" || t.name === "mission");
+    }),
     taskTool(agent, (model, allowedTools?: string[]) => {
       const spawned = createTools({ ...agent, model }, extra, depth - 1);
       if (!allowedTools?.length) return spawned;
       const allowed = new Set(allowedTools);
-      return spawned.filter(t => allowed.has(t.name) || t.name === "task" || t.name === "bg");
+      return spawned.filter((t) => allowed.has(t.name) || t.name === "task" || t.name === "bg" || t.name === "mission");
     }),
     bgTool(() => all),
-    ...baseTools.slice(1),
+    ...baseTools.slice(2),
   ];
   return all;
 }

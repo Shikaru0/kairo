@@ -81,3 +81,14 @@ You are an expert debugger. Find root cause, apply minimal fixes, verify with te
 ```
 
 Call with `task` using `subagent: "debugger"`. Agents can restrict tools, set custom system prompts, models, temperature, and thinking.
+
+## Missions (autonomous task decomposition)
+
+Kairo has a `mission` tool for breaking large goals into a DAG of tasks with dependencies. Independent tasks run in parallel via subagents.
+
+Actions: `create`, `run`, `status`, `list`, `clear`.
+
+Example flow:
+1. `mission {action:"create", goal:"Refactor auth module", tasks:[{id:"explore", title:"Explore auth", description:"...", subagent:"explore"}, {id:"plan", title:"Plan changes", description:"...", deps:["explore"], subagent:"plan"}, {id:"impl", title:"Implement", description:"...", deps:["plan"]}]}` 
+2. `mission {action:"run", missionId:"m0"}`
+3. `mission {action:"status", missionId:"m0"}`
