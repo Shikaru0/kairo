@@ -1,0 +1,8 @@
+# Scope-based registry routing.
+@shikaru0:registry=https://npm.pkg.github.com
+
+# Auth token is injected at runtime by the workflow (NODE_AUTH_TOKEN env var).
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+
+# Always publish scoped packages as restricted by default.
+access=restricted
