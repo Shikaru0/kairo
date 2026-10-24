@@ -6,7 +6,6 @@
   "repository": {"type": "git", "url": "git+https://github.com/Shikaru0/kairo.git"},
   "module": "src/index.ts",
   "type": "module",
-  "private": true,
   "scripts": {
     "dev": "bun src/index.ts",
     "test": "bun test"
