@@ -5,6 +5,8 @@
 [![GitHub Release](https://img.shields.io/github/v/release/Shikaru0/kairo)](https://github.com/Shikaru0/kairo/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Packages](https://img.shields.io/github/package-json/v/Shikaru0/kairo?label=packages)](https://github.com/Shikaru0/kairo/pkgs/npm/kairo)
+[![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-000000?logo=bun&logoColor=white)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 A minimal terminal coding agent built on [Bun](https://bun.sh). Kairo runs locally with [Ollama](https://ollama.com) or any OpenAI-compatible host, keeps its context lean with automatic compaction, self-reviews its work, and extends itself with plugins, MCP servers, subagents, missions, and custom commands.
 
