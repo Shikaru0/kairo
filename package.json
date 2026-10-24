@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Terminal coding agent built on Bun with Ollama/OpenAI-compatible providers, plugins, subagents, missions, and custom commands.",
   "license": "MIT",
+  "bin": {
+    "kairo": "./src/index.ts"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Shikaru0/kairo.git"

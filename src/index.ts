@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import * as readline from "node:readline/promises";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
