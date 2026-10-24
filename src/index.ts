@@ -14,6 +14,7 @@ import { skillTool } from "./tools/skill.ts";
 import { projectSnapshot } from "./snapshot.ts";
 import type { Message } from "./provider/provider.ts";
 import { loadSubagents } from "./agents/agent.ts";
+import { loadPromptCommands, loadTsCommands, expandCommand } from "./commands/command.ts";
 
 const SESSIONS_DIR = ".kairo-sessions";
 const DEFAULT_SESSION = "default";
@@ -128,6 +129,11 @@ if (plugins.skills.length || plugins.tools.length || plugins.prompts.length) {
   );
 }
 const subagents = await loadSubagents();
+const promptCommands = await loadPromptCommands();
+const tsCommands = await loadTsCommands();
+if (promptCommands.length || tsCommands.length) {
+  process.stdout.write(`\x1b[2m[commands: ${promptCommands.length + tsCommands.length}]\x1b[0m\n`);
+}
 // Where the work is, then the user's and project's own AGENTS.md, then each
 // plugin's, then the skill catalog, then any MCP server instructions: facts
 // first, what the model can look up next, and the standing rules last.
@@ -367,8 +373,106 @@ for await (const line of rl) {
     if (!closed) rl.prompt();
     continue;
   }
+  if (input === "/commands") {
+    for (const cmd of promptCommands) {
+      process.stdout.write(`\x1b[2m/${cmd.name}${cmd.description ? ` - ${cmd.description}` : ""} (md)\x1b[0m\n`);
+    }
+    for (const cmd of tsCommands) {
+      process.stdout.write(`\x1b[2m/${cmd.name}${cmd.description ? ` - ${cmd.description}` : ""} (ts)\x1b[0m\n`);
+    }
+    if (!promptCommands.length && !tsCommands.length) process.stdout.write("\x1b[2m[no custom commands]\x1b[0m\n");
+    process.stdout.write("\n");
+    if (!closed) rl.prompt();
+    continue;
+  }
+  if (input.startsWith("/") && !input.startsWith("//")) {
+    // Custom commands
+    const parts = input.slice(1).split(/\s+/);
+    const cmdName = parts[0];
+    const args = parts.slice(1).join(" ");
+    const argArr = parts.slice(1);
+    const tsCmd = tsCommands.find((c) => c.name === cmdName);
+    if (tsCmd) {
+      const ctx = {
+        input,
+        args: argArr,
+        rawArgs: args,
+        chat,
+        save,
+        print: (text: string) => process.stdout.write(text + "\n\n"),
+      };
+      try {
+        await tsCmd.run(ctx);
+        await save();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stdout.write(`\x1b[2m[command error: ${message}]\x1b[0m\n\n`);
+      }
+      if (!closed) rl.prompt();
+      continue;
+    }
+    const custom = promptCommands.find((c) => c.name === cmdName);
+    if (custom) {
+      const expanded = expandCommand(custom, args);
+      if (expanded) {
+        // Send as if user typed it
+        let inThinking = false;
+        try {
+          for await (const chunk of chat.send(expanded)) {
+            if (chunk.type === "reasoning") {
+              if (!inThinking) {
+                inThinking = true;
+                process.stdout.write("\x1b[2m[thinking] ");
+              }
+              process.stdout.write(chunk.text);
+              continue;
+            }
+            if (inThinking) {
+              inThinking = false;
+              process.stdout.write("\x1b[0m\n\n");
+            }
+            if (chunk.type === "text") process.stdout.write(chunk.text);
+            else if (chunk.type === "toolCall") process.stdout.write(`\x1b[2m[tool] ${chunk.call.name}(${chunk.call.arguments})\x1b[0m\n\n`);
+            else if (chunk.type === "finish" && chunk.reason === "length") process.stdout.write("\x1b[2m[cut off: hit the model's context/token limit]\x1b[0m\n\n");
+            else if (chunk.type === "stop" && chunk.reason === "stuck") {
+              if ((chunk as any).failures?.length) {
+                const lines = (chunk as any).failures.slice(-8).map((f: any) => `  - ${f.call}: ${f.error}`).join("\n");
+                process.stdout.write(`\x1b[2m[stopped: tool calls kept failing]\n${lines}\x1b[0m\n\n`);
+              } else {
+                process.stdout.write("\x1b[2m[stopped: model kept replying with nothing]\x1b[0m\n\n");
+              }
+            } else if (chunk.type === "compact") {
+              process.stdout.write(`\x1b[2m[context compacted: ${(chunk as any).removed} messages -> summary]\x1b[0m\n\n`);
+            } else if (chunk.type === "trim") {
+              process.stdout.write(`\x1b[2m[context trimmed: ${(chunk as any).elided} old tool results shortened]\x1b[0m\n\n`);
+            } else if (chunk.type === "check") {
+              process.stdout.write((chunk as any).revised ? `\x1b[2m[self-check] ${(chunk as any).verdict}\x1b[0m\n\n` : "\x1b[2m[self-check] ok\x1b[0m\n\n");
+            }
+          }
+          if (inThinking) process.stdout.write("\x1b[0m");
+          process.stdout.write("\n\n");
+        } catch (error) {
+          if (inThinking) process.stdout.write("\x1b[0m");
+          const message = error instanceof Error ? error.message : String(error);
+          process.stdout.write(`\x1b[2m[provider error: ${message}]\x1b[0m\n\n`);
+        }
+        await save();
+        if (!closed) rl.prompt();
+        continue;
+      }
+    }
+  }
   if (input === "/help") {
-    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /provider [name] [model] /compact /plugins /ls /exit\n\n");
+    process.stdout.write("/new /clear /history /use <id> /save <id> /model [name] /provider [name] [model] /compact /plugins /commands /agents /ls /exit\n\n");
+    if (!closed) rl.prompt();
+    continue;
+  }
+  if (input === "/agents") {
+    for (const a of subagents) {
+      process.stdout.write(`\x1b[2m${a.name}${a.description ? ` - ${a.description}` : ""}\x1b[0m\n`);
+    }
+    if (!subagents.length) process.stdout.write("\x1b[2m[no agents]\x1b[0m\n");
+    process.stdout.write("\n");
     if (!closed) rl.prompt();
     continue;
   }

@@ -92,3 +92,35 @@ Example flow:
 1. `mission {action:"create", goal:"Refactor auth module", tasks:[{id:"explore", title:"Explore auth", description:"...", subagent:"explore"}, {id:"plan", title:"Plan changes", description:"...", deps:["explore"], subagent:"plan"}, {id:"impl", title:"Implement", description:"...", deps:["plan"]}]}` 
 2. `mission {action:"run", missionId:"m0"}`
 3. `mission {action:"status", missionId:"m0"}`
+
+## Custom slash commands
+
+Define custom commands as `.ts`/`.js` files with `run(ctx)` or as `.md` prompt templates in:
+- `./.kairo/commands/`
+- `./commands/`
+- `~/.config/kairo/commands/`
+- `~/.config/opencode/commands/`
+- `~/.claude/commands/`
+
+**TypeScript command example** (`.kairo/commands/hello.ts`):
+```ts
+export default {
+  name: "hello",
+  description: "Say hello",
+  run: async (ctx) => {
+    ctx.print("Hello! Args: " + ctx.rawArgs);
+    // ctx.chat, ctx.save(), ctx.args available
+  },
+};
+```
+
+**Markdown prompt command**:
+```markdown
+---
+name: review
+description: Review code
+---
+Review $ARGUMENTS for bugs and suggest improvements.
+```
+
+Use with `/review src/auth.ts`. List with `/commands`.
